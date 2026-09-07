@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         О sd.bitech
 // @namespace    http://tampermonkey.net/
-// @version      20260906.6
+// @version      20260906.7
 // @description  Видалення кнопки виходу. Компактні списки заявок. Ярлики. Моніторинг нових заявок + Звук и Фильтры + Системные уведомления
 // @author       Ovolsan
 // @match        *://sd.bitech.com.ua/*
@@ -111,7 +111,7 @@
             sidebar.appendChild(customContainer);
         }
         const queuesBlock = document.querySelector('div.flex.flex-wrap.gap-2.mb-3:has(app-badge-link)');
-        if (queuesBlock) queuesBlock.style.display = 'none';
+        if (queuesBlock && queuesBlock.style.display !== 'none') queuesBlock.style.display = 'none';
 
         const currentSnapshot = Array.from(customContainer.querySelectorAll('.ovolya-queue-shortcut, .ovolya-shortcut-btn'))
             .map(el => `${el.className}:${el.textContent.trim()}:${el.title}`).join('|');
@@ -174,13 +174,18 @@
 
     // ===================================ЗАМЕНА ТЕКСТА СТАТУСА=========================
     function replaceStatusText() {
-        const target = 'Первинна обробка';
-        const replacement = 'Потрогали';
-        document.querySelectorAll('.status-badge, .p-badge, .request-column .property-value, .app-string-list-property').forEach(el => {
-            if (el.textContent.includes(target)) {
-                el.textContent = el.textContent.replace(target, replacement);
-            }
-        });
+        if (typeof statusObserver !== 'undefined') statusObserver.disconnect();
+        try {
+            const target = 'Первинна обробка';
+            const replacement = 'Потрогали';
+            document.querySelectorAll('.status-badge, .p-badge, .request-column .property-value, .app-string-list-property').forEach(el => {
+                if (el.textContent.includes(target)) {
+                    el.textContent = el.textContent.replace(target, replacement);
+                }
+            });
+        } finally {
+            if (typeof statusObserver !== 'undefined') statusObserver.observe(document.body, { childList: true, subtree: true });
+        }
     }
 
     // =========================НАСТРОЙКИ, ФИЛЬТРЫ И ЗВУК===================================
@@ -206,24 +211,6 @@
 
     function saveRequestFilterRules() { localStorage.setItem(REQUEST_FILTERS_KEY, JSON.stringify(requestFilterRules)); }
     function saveMuteRules() { localStorage.setItem('sd_mute_rules', JSON.stringify(muteRules)); }
-
-    function isTicketFiltered(ticket) {
-        return muteRules.some(rule => {
-            if (!rule || !rule.type || !rule.text) return false;
-            const value = String(rule.text).trim().toLowerCase();
-            if (!value) return false;
-            switch (rule.type) {
-                case 'title':
-                    return String(ticket.title || '').toLowerCase().includes(value);
-                case 'department':
-                    return String(ticket.department || '').toLowerCase().includes(value);
-                case 'id':
-                    return String(ticket.id) === value;
-                default:
-                    return false;
-            }
-        });
-    }
 
     function stopCurrentAudio() { if (currentAudio) { currentAudio.pause(); currentAudio = null; } }
 
@@ -360,6 +347,7 @@
     function monitorWriteLock() { try { localStorage.setItem(MONITOR_LOCK_KEY, JSON.stringify({ token: monitorToken, expiresAt: Date.now() + 8000 })); return true; } catch (e) { return false; } }
 
     function monitorAcquireLock() {
+        if (!isMonitorTargetPage()) return false;
         const existing = monitorReadLock();
         if (existing && existing.token !== monitorToken && existing.expiresAt > Date.now()) { monitorIsOwner = false; return false; }
         monitorWriteLock();
@@ -367,7 +355,7 @@
         return monitorIsOwner;
     }
 
-    function monitorRenewLock() { if (monitorIsOwner) monitorWriteLock(); }
+    function monitorRenewLock() { if (monitorIsOwner && isMonitorTargetPage()) monitorWriteLock(); }
     function monitorReleaseLock() { try { if (monitorReadLock()?.token === monitorToken) localStorage.removeItem(MONITOR_LOCK_KEY); } catch (e) { } monitorIsOwner = false; }
     function monitorGetKnownIds() { const ids = monitorReadJSON(MONITOR_KNOWN_IDS_KEY, []); return Array.isArray(ids) ? ids.map(String) : []; }
     function monitorSaveKnownIds(ids) { const unique = [...new Set(ids.map(String))]; monitorWriteJSON(MONITOR_KNOWN_IDS_KEY, unique.slice(Math.max(0, unique.length - 1000))); }
@@ -397,7 +385,7 @@
         }
     }
 
-    // ТВОЯ ФУНКЦИЯ УВЕДОМЛЕНИЙ
+    // УВЕДОМЛЕНИЯ
     function monitorNotifyNewTickets(newTickets) {
         if (!Array.isArray(newTickets) || !newTickets.length) return;
 
@@ -487,8 +475,19 @@
         setTimeout(() => { if (notification.isConnected) notification.remove(); }, 15000);
     }
 
-    function monitorStartTitleBlink() { monitorTitleBlinking = true; }
-    function monitorStopTitleBlink() { monitorTitleBlinking = false; document.title = monitorOriginalTitle; }
+    function monitorStartTitleBlink() { 
+        if (!monitorTitleBlinking) {
+            monitorOriginalTitle = document.title;
+            monitorTitleBlinking = true; 
+        }
+    }
+    
+    function monitorStopTitleBlink() { 
+        monitorTitleBlinking = false; 
+        if (document.title.includes('🟠 НОВЫЕ ЗАЯВКИ')) {
+            document.title = monitorOriginalTitle; 
+        }
+    }
 
     // =====================DEBUG / НАСТРОЙКИ UI =======================================
     function renderPanelContent(panel) {
@@ -663,7 +662,7 @@
         pinBtn.id = 'ovolya-monitor-pin-btn';
         pinBtn.style.cssText = `background: #222; color: #fff; padding: 0 10px; cursor: pointer; border: 1px solid #444; border-radius: 4px; display: flex; align-items: center;`;
         pinBtn.textContent = '📌';
-        pinBtn.onclick = () => { monitorWriteLock(); monitorCheckOwnership(); };
+        pinBtn.onclick = () => { if (isMonitorTargetPage()) { monitorWriteLock(); monitorCheckOwnership(); } };
 
         const btnRules = document.createElement('div');
         btnRules.id = 'ovolya-menu-rules-btn';
@@ -693,9 +692,10 @@
         const soundBtn = container.querySelector('#ovolya-menu-sound-btn');
         
         if (!isMonitorTargetPage() && !isMenuOpen) {
-            container.style.display = 'none'; return;
+            if (container.style.display !== 'none') container.style.display = 'none'; 
+            return;
         } else {
-            container.style.display = 'flex';
+            if (container.style.display !== 'flex') container.style.display = 'flex';
         }
         
         const m = Math.floor(Math.max(0, monitorTimeLeft) / 60);
@@ -759,8 +759,6 @@
                 monitorRenewLock();
                 if (isMonitorTargetPage()) {
                     location.reload();
-                } else if (window.location.pathname === '/admin/requests') {
-                    location.href = TARGET_URL;
                 } else {
                     monitorReleaseLock();
                 }
@@ -771,12 +769,20 @@
     }, 1000);
 
     function monitorCheckOwnership() {
+        if (!isMonitorTargetPage()) {
+            if (monitorIsOwner) {
+                monitorReleaseLock();
+            }
+            monitorUpdateDebug();
+            return;
+        }
+
         const lock = monitorReadLock();
         if (lock && lock.token !== monitorToken && lock.expiresAt > Date.now()) {
             if (monitorIsOwner) { monitorIsOwner = false; clearTimeout(monitorIdleTimeout); }
             monitorUpdateDebug(); return;
         }
-        if (!monitorIsOwner && isMonitorTargetPage()) {
+        if (!monitorIsOwner) {
             if (monitorAcquireLock()) {
                 monitorLastTick = Date.now(); monitorTimeLeft = MONITOR_TIMER_MAX_SEC;
                 monitorCheckForNewTickets();
@@ -795,13 +801,17 @@
         }
         
         monitorCreateDebug();
-        monitorAcquireLock();
+        if (isMonitorTargetPage()) {
+            monitorAcquireLock();
+        }
         monitorLastTick = Date.now();
         monitorUpdateDebug();
         
         setTimeout(() => {
             if (monitorIsOwner && isMonitorTargetPage()) { monitorCheckForNewTickets(); } 
-            hideBlacklistedTickets();
+            if (window.location.pathname.startsWith('/admin/requests')) {
+                hideBlacklistedTickets();
+            }
         }, 2000);
         
         setInterval(() => { if (monitorIsOwner) monitorRenewLock(); }, 2500);
@@ -810,15 +820,23 @@
 
     ['mousemove', 'keydown', 'click', 'wheel'].forEach(evt => window.addEventListener(evt, () => { monitorSetWorking(); if (evt === 'click') monitorHadClicks = true; }));
     window.addEventListener('blur', () => { clearTimeout(monitorIdleTimeout); monitorIsPaused = false; monitorLastTick = Date.now(); monitorTimeLeft = Math.min(monitorTimeLeft + MONITOR_ADD_TIME_ON_BLUR_SEC, MONITOR_TIMER_MAX_SEC); monitorHadClicks = false; monitorUpdateDebug(); });
+    
     setInterval(() => {
         if (monitorNotificationCount > 0) {
             monitorTitleBlinking = !monitorTitleBlinking;
             document.title = monitorTitleBlinking ? '🟠 НОВЫЕ ЗАЯВКИ' : monitorOriginalTitle;
-        } else {
-            if (document.title !== monitorOriginalTitle) document.title = monitorOriginalTitle;
-            monitorTitleBlinking = false;
         }
     }, 1000);
+
+    window.addEventListener('popstate', () => {
+        monitorCheckOwnership();
+        runAllTasks();
+    });
+    window.addEventListener('hashchange', () => {
+        monitorCheckOwnership();
+        runAllTasks();
+    });
+
     window.addEventListener('storage', (e) => { if (e.key === MONITOR_LOCK_KEY) monitorCheckOwnership(); });
     window.addEventListener('beforeunload', () => { clearTimeout(monitorIdleTimeout); monitorReleaseLock(); });
     
@@ -835,7 +853,11 @@
             if (link) {
                 const ticketRow = link.closest('tr');
                 if (ticketRow) {
-                    ticketRow.style.display = isRequestFiltered(t) ? 'none' : '';
+                    const shouldHide = isRequestFiltered(t);
+                    const targetDisplay = shouldHide ? 'none' : '';
+                    if (ticketRow.style.display !== targetDisplay) {
+                        ticketRow.style.display = targetDisplay;
+                    }
                 }
             }
         }
@@ -846,7 +868,9 @@
         try {
             manageLogoutButton();
             if (window.location.pathname === '/admin/requests' || window.location.pathname === '/admin/requests/') {
-                relocateControlsAndQueues(); enhanceListPage();
+                relocateControlsAndQueues(); 
+                enhanceListPage();
+                hideBlacklistedTickets();
             } else {
                 const customContainer = document.getElementById('ovolya-custom-sidebar-container');
                 if (customContainer) customContainer.remove();
