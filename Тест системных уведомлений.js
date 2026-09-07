@@ -26,7 +26,7 @@
     // 2. Сброс последних ID заявок
     let ids = JSON.parse(localStorage.getItem('ovolya_sd_new_requests_known_ids') || '[]');
     if (ids.length > 0) {
-        let countToRemove = Math.min(30, ids.length);
+        let countToRemove = Math.min(3, ids.length);
         let removed = ids.splice(-countToRemove, countToRemove);
         localStorage.setItem('ovolya_sd_new_requests_known_ids', JSON.stringify(ids));
         console.log(`🗑️ Удалены ID из памяти: ${removed.join(', ')}.`);

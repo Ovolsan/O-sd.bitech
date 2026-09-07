@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         О sd.bitech
 // @namespace    http://tampermonkey.net/
-// @version      20260906.7
+// @version      20260907.2
 // @description  Видалення кнопки виходу. Компактні списки заявок. Ярлики. Моніторинг нових заявок + Звук и Фильтры + Системные уведомления
 // @author       Ovolsan
 // @match        *://sd.bitech.com.ua/*
@@ -13,6 +13,7 @@
 (function () {
     'use strict';
     let lastShortcutsSnapshot = '';
+    let trackedSourceElements = []; // Массив для слежения за оригинальными элементами (не оторвал ли их Angular)
 
     // ================================КАРТА СОКРАЩЕНИЙ ОЧЕРЕДЕЙ============================
     const QUEUE_MAP = {
@@ -59,17 +60,37 @@
         if (!container) return;
         container.querySelectorAll('button, a[pbutton]').forEach(btn => {
             const text = btn.textContent.trim();
-            let iconClass = '', title = '';
-            if (text.includes('Фільтр') || text.includes('Фільтрувати')) { iconClass = 'ovolya-btn-filter'; title = 'Фільтрувати'; }
-            else if (text.includes('Додати')) { iconClass = 'ovolya-btn-add'; title = 'Додати'; }
-            else if (text.includes('Редагувати')) { iconClass = 'ovolya-btn-edit'; title = 'Редагувати'; }
-            else if (btn.getAttribute('aria-label') === 'Інші дії' || btn.classList.contains('p-splitbutton-dropdown')) { iconClass = 'ovolya-btn-more'; title = 'Інші дії'; }
+            let iconClass = '', title = '', actionType = '';
+
+            if (text.includes('Фільтр') || text.includes('Фільтрувати')) { iconClass = 'ovolya-btn-filter'; title = 'Фільтрувати'; actionType = 'filter'; }
+            else if (text.includes('Додати')) { iconClass = 'ovolya-btn-add'; title = 'Додати'; actionType = 'add'; }
+            else if (text.includes('Редагувати')) { iconClass = 'ovolya-btn-edit'; title = 'Редагувати'; actionType = 'edit'; }
+            else if (btn.getAttribute('aria-label') === 'Інші дії' || btn.classList.contains('p-splitbutton-dropdown')) { iconClass = 'ovolya-btn-more'; title = 'Інші дії'; actionType = 'more'; }
             else return;
+
+            trackedSourceElements.push(btn); // Запоминаем оригинальную кнопку
 
             const shortcut = document.createElement('button');
             shortcut.className = `ovolya-shortcut-btn ovolya-btn-icon-mode ${iconClass}`;
             shortcut.title = title;
-            shortcut.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); btn.click(); });
+            shortcut.addEventListener('click', (e) => {
+                e.preventDefault(); e.stopPropagation();
+
+                // Динамический поиск "живой" кнопки на случай, если Angular её только что перерисовал
+                const liveContainer = findBottomActionContainer();
+                if (liveContainer) {
+                    const liveBtn = Array.from(liveContainer.querySelectorAll('button, a[pbutton]')).find(b => {
+                        const t = b.textContent.trim();
+                        if (actionType === 'filter') return t.includes('Фільтр') || t.includes('Фільтрувати');
+                        if (actionType === 'add') return t.includes('Додати');
+                        if (actionType === 'edit') return t.includes('Редагувати');
+                        if (actionType === 'more') return b.getAttribute('aria-label') === 'Інші дії' || b.classList.contains('p-splitbutton-dropdown');
+                        return false;
+                    });
+                    if (liveBtn) { liveBtn.click(); return; }
+                }
+                btn.click(); // Фолбек на старую
+            });
             customContainer.appendChild(shortcut);
         });
     }
@@ -89,12 +110,27 @@
             if (fullName === 'Мої заявки') return;
             let shortName = QUEUE_MAP[fullName] || (fullName.length > 10 ? fullName.substring(0, 10) : fullName);
 
+            trackedSourceElements.push(anchor); // Запоминаем оригинальную очередь
+
             const shortcut = document.createElement('a');
             shortcut.className = 'ovolya-queue-shortcut';
             shortcut.textContent = shortName;
             shortcut.title = fullName;
             shortcut.href = anchor.getAttribute('href') || '#';
-            shortcut.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); anchor.click(); lastShortcutsSnapshot = ''; });
+            shortcut.addEventListener('click', (e) => {
+                e.preventDefault(); e.stopPropagation();
+
+                // Динамический поиск
+                const liveAnchors = Array.from(document.querySelectorAll('app-badge-link a'));
+                const liveAnchor = liveAnchors.find(a => {
+                     let n = a.title || Array.from(a.childNodes).filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent.trim()).join('').trim();
+                     return n === fullName;
+                });
+                if (liveAnchor) liveAnchor.click();
+                else anchor.click();
+
+                lastShortcutsSnapshot = '';
+            });
             if (anchor.classList.contains('p-button-contrast')) shortcut.classList.add('active');
             customContainer.appendChild(shortcut);
         });
@@ -113,14 +149,29 @@
         const queuesBlock = document.querySelector('div.flex.flex-wrap.gap-2.mb-3:has(app-badge-link)');
         if (queuesBlock && queuesBlock.style.display !== 'none') queuesBlock.style.display = 'none';
 
-        const currentSnapshot = Array.from(customContainer.querySelectorAll('.ovolya-queue-shortcut, .ovolya-shortcut-btn'))
-            .map(el => `${el.className}:${el.textContent.trim()}:${el.title}`).join('|');
+        // 1. Проверяем, не удалил ли Angular оригинальные кнопки из DOM
+        if (trackedSourceElements.length > 0 && trackedSourceElements.some(el => !el.isConnected)) {
+            lastShortcutsSnapshot = ''; // Принудительный сброс
+        }
+
+        // 2. Формируем снимок на основе ОРИГИНАЛЬНЫХ кнопок на странице, а не наших созданных ярлыков
+        let currentSnapshot = '';
+        document.querySelectorAll('app-badge-link a').forEach(a => {
+            currentSnapshot += `Q:${a.textContent.trim()}:${a.classList.contains('p-button-contrast') ? '1' : '0'}|`;
+        });
+        const actionContainer = findBottomActionContainer();
+        if (actionContainer) {
+            actionContainer.querySelectorAll('button, a[pbutton]').forEach(btn => {
+                currentSnapshot += `B:${btn.textContent.trim() || btn.getAttribute('aria-label') || ''}|`;
+            });
+        }
+
         if (currentSnapshot === lastShortcutsSnapshot && currentSnapshot !== '') return;
 
+        trackedSourceElements = []; // Очищаем массив перед новым рендером
         createQueueShortcuts(customContainer);
         createActionShortcuts(customContainer);
-        lastShortcutsSnapshot = Array.from(customContainer.querySelectorAll('.ovolya-queue-shortcut, .ovolya-shortcut-btn'))
-            .map(el => `${el.className}:${el.textContent.trim()}:${el.title}`).join('|');
+        lastShortcutsSnapshot = currentSnapshot;
     }
 
     //=====================================ОПТИМИЗАЦИЯ СПИСКА ЗАЯВОК=======================
@@ -228,7 +279,7 @@
             monitorNotificationCount = 0;
             monitorStopTitleBlink();
             monitorUpdateDebug();
-            
+
             if (monitorBrowserNotification) {
                 try { monitorBrowserNotification.close(); } catch(err) {}
                 monitorBrowserNotification = null;
@@ -324,7 +375,7 @@
     let monitorIsPaused = false;
     let monitorLastTick = Date.now();
     let monitorHadClicks = false;
-    
+
     // Переменные для пушей и уведомлений
     let monitorNotificationCount = 0;
     let monitorPendingTickets = new Map();
@@ -332,13 +383,26 @@
     let monitorOriginalTitle = document.title;
     let monitorBrowserNotification = null;
     let monitorNotificationGeneration = 0;
-    
+
     let monitorDebugDiv = null;
     let monitorInitialized = false;
 
-    // СТРОГАЯ ПРОВЕРКА URL
+    // Цільова сторінка: /admin/requests з presetId=my-queues (дозволені додаткові query-параметри, напр. &queue=12)
     function isMonitorTargetPage() {
-        return window.location.href === TARGET_URL;
+        try {
+            const u = new URL(window.location.href);
+            return u.pathname === '/admin/requests' && u.searchParams.get('presetId') === 'my-queues';
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function goToMonitorTargetPage() {
+        if (window.location.href === TARGET_URL) {
+            location.reload();
+        } else {
+            location.href = TARGET_URL;
+        }
     }
 
     function monitorReadJSON(key, fallback) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch (e) { return fallback; } }
@@ -347,6 +411,7 @@
     function monitorWriteLock() { try { localStorage.setItem(MONITOR_LOCK_KEY, JSON.stringify({ token: monitorToken, expiresAt: Date.now() + 8000 })); return true; } catch (e) { return false; } }
 
     function monitorAcquireLock() {
+        // Захоплюємо lock лише на цільовій сторінці списку
         if (!isMonitorTargetPage()) return false;
         const existing = monitorReadLock();
         if (existing && existing.token !== monitorToken && existing.expiresAt > Date.now()) { monitorIsOwner = false; return false; }
@@ -355,7 +420,8 @@
         return monitorIsOwner;
     }
 
-    function monitorRenewLock() { if (monitorIsOwner && isMonitorTargetPage()) monitorWriteLock(); }
+    // Продовжуємо тримати lock навіть якщо користувач тимчасово пішов на іншу сторінку (напр. /create)
+    function monitorRenewLock() { if (monitorIsOwner) monitorWriteLock(); }
     function monitorReleaseLock() { try { if (monitorReadLock()?.token === monitorToken) localStorage.removeItem(MONITOR_LOCK_KEY); } catch (e) { } monitorIsOwner = false; }
     function monitorGetKnownIds() { const ids = monitorReadJSON(MONITOR_KNOWN_IDS_KEY, []); return Array.isArray(ids) ? ids.map(String) : []; }
     function monitorSaveKnownIds(ids) { const unique = [...new Set(ids.map(String))]; monitorWriteJSON(MONITOR_KNOWN_IDS_KEY, unique.slice(Math.max(0, unique.length - 1000))); }
@@ -363,23 +429,23 @@
     function monitorCheckForNewTickets() {
         if (!isMonitorTargetPage()) return;
         if (!monitorIsOwner) return;
-        
+
         const currentTickets = getCurrentTickets();
         if (currentTickets.length === 0) return;
-        
+
         const knownIds = monitorGetKnownIds();
         if (knownIds.length === 0) {
             monitorSaveKnownIds(currentTickets.map(t => t.id));
             return;
         }
-        
+
         const knownSet = new Set(knownIds);
         const newTickets = currentTickets.filter(t => !knownSet.has(t.id));
         if (newTickets.length === 0) return;
-        
+
         const unmutedTickets = newTickets.filter(ticket => !isRequestFiltered(ticket));
         monitorSaveKnownIds([...knownIds, ...newTickets.map(t => t.id)]);
-        
+
         if (unmutedTickets.length > 0) {
             monitorNotifyNewTickets(unmutedTickets);
         }
@@ -475,17 +541,17 @@
         setTimeout(() => { if (notification.isConnected) notification.remove(); }, 15000);
     }
 
-    function monitorStartTitleBlink() { 
+    function monitorStartTitleBlink() {
         if (!monitorTitleBlinking) {
             monitorOriginalTitle = document.title;
-            monitorTitleBlinking = true; 
+            monitorTitleBlinking = true;
         }
     }
-    
-    function monitorStopTitleBlink() { 
-        monitorTitleBlinking = false; 
+
+    function monitorStopTitleBlink() {
+        monitorTitleBlinking = false;
         if (document.title.includes('🟠 НОВЫЕ ЗАЯВКИ')) {
-            document.title = monitorOriginalTitle; 
+            document.title = monitorOriginalTitle;
         }
     }
 
@@ -690,21 +756,21 @@
         const modeBtn = container.querySelector('#ovolya-mode-btn');
         const rulesBtn = container.querySelector('#ovolya-menu-rules-btn');
         const soundBtn = container.querySelector('#ovolya-menu-sound-btn');
-        
+
         if (!isMonitorTargetPage() && !isMenuOpen) {
-            if (container.style.display !== 'none') container.style.display = 'none'; 
+            if (container.style.display !== 'none') container.style.display = 'none';
             return;
         } else {
             if (container.style.display !== 'flex') container.style.display = 'flex';
         }
-        
+
         const m = Math.floor(Math.max(0, monitorTimeLeft) / 60);
         const s = Math.floor(Math.max(0, monitorTimeLeft) % 60);
         let status = monitorIsOwner ? 'моніторинг' : 'очікування';
         let timerText = `🔄 ${m}:${String(s).padStart(2, '0')} | ${status}`;
-        
+
         if (monitorNotificationCount > 0) timerText += ` | 🟠 нових: ${monitorNotificationCount}`;
-        
+
         if (isMenuOpen) {
             timerBtn.textContent = '❌ Закрыть';
             timerBtn.style.color = '#fff'; timerBtn.style.background = '#522'; timerBtn.style.border = '1px solid #a44';
@@ -721,10 +787,10 @@
             }
         } else {
             timerBtn.textContent = timerText;
-            if (monitorNotificationCount > 0) { 
-                timerBtn.style.color = '#ffaa00'; timerBtn.style.border = '1px solid #ffaa00'; timerBtn.style.background = '#222'; 
-            } else { 
-                timerBtn.style.color = '#0f0'; timerBtn.style.border = '1px solid #444'; timerBtn.style.background = '#222'; 
+            if (monitorNotificationCount > 0) {
+                timerBtn.style.color = '#ffaa00'; timerBtn.style.border = '1px solid #ffaa00'; timerBtn.style.background = '#222';
+            } else {
+                timerBtn.style.color = '#0f0'; timerBtn.style.border = '1px solid #444'; timerBtn.style.background = '#222';
             }
             modeBtn.style.display = 'none'; rulesBtn.style.display = 'none'; soundBtn.style.display = 'none'; panel.style.display = 'none';
         }
@@ -734,11 +800,11 @@
     // =======================АКТИВНОСТЬ ПОЛЬЗОВАТЕЛЯ=====================================
     let monitorIdleTimeout = null;
     function monitorSetWorking() {
-        if (!monitorIsOwner || !isMonitorTargetPage()) return;
+        if (!monitorIsOwner) return;
         monitorIsPaused = true;
         clearTimeout(monitorIdleTimeout);
         monitorIdleTimeout = setTimeout(() => {
-            if (!monitorIsOwner || !isMonitorTargetPage()) return;
+            if (!monitorIsOwner) return;
             monitorIsPaused = false; monitorLastTick = Date.now();
             if (monitorHadClicks) { monitorTimeLeft = Math.min(monitorTimeLeft + MONITOR_ADD_TIME_ON_BLUR_SEC, MONITOR_TIMER_MAX_SEC); monitorHadClicks = false; }
             monitorUpdateDebug();
@@ -757,11 +823,8 @@
                 monitorTimeLeft = 0;
                 monitorIsPaused = true;
                 monitorRenewLock();
-                if (isMonitorTargetPage()) {
-                    location.reload();
-                } else {
-                    monitorReleaseLock();
-                }
+                // Завжди повертаємо на цільову сторінку (навіть якщо користувач пішов на /create тощо)
+                goToMonitorTargetPage();
                 return;
             }
         }
@@ -769,10 +832,8 @@
     }, 1000);
 
     function monitorCheckOwnership() {
+        // Не відпускаємо lock при тимчасовому виході зі списку — таймер має повернути на TARGET_URL
         if (!isMonitorTargetPage()) {
-            if (monitorIsOwner) {
-                monitorReleaseLock();
-            }
             monitorUpdateDebug();
             return;
         }
@@ -795,32 +856,32 @@
     function initNewRequestsMonitor() {
         if (monitorInitialized) return;
         monitorInitialized = true;
-        
+
         if ('Notification' in window && Notification.permission === 'default') {
             Notification.requestPermission();
         }
-        
+
         monitorCreateDebug();
         if (isMonitorTargetPage()) {
             monitorAcquireLock();
         }
         monitorLastTick = Date.now();
         monitorUpdateDebug();
-        
+
         setTimeout(() => {
-            if (monitorIsOwner && isMonitorTargetPage()) { monitorCheckForNewTickets(); } 
+            if (monitorIsOwner && isMonitorTargetPage()) { monitorCheckForNewTickets(); }
             if (window.location.pathname.startsWith('/admin/requests')) {
                 hideBlacklistedTickets();
             }
         }, 2000);
-        
+
         setInterval(() => { if (monitorIsOwner) monitorRenewLock(); }, 2500);
         setInterval(monitorCheckOwnership, 3000);
     }
 
     ['mousemove', 'keydown', 'click', 'wheel'].forEach(evt => window.addEventListener(evt, () => { monitorSetWorking(); if (evt === 'click') monitorHadClicks = true; }));
     window.addEventListener('blur', () => { clearTimeout(monitorIdleTimeout); monitorIsPaused = false; monitorLastTick = Date.now(); monitorTimeLeft = Math.min(monitorTimeLeft + MONITOR_ADD_TIME_ON_BLUR_SEC, MONITOR_TIMER_MAX_SEC); monitorHadClicks = false; monitorUpdateDebug(); });
-    
+
     setInterval(() => {
         if (monitorNotificationCount > 0) {
             monitorTitleBlinking = !monitorTitleBlinking;
@@ -839,7 +900,7 @@
 
     window.addEventListener('storage', (e) => { if (e.key === MONITOR_LOCK_KEY) monitorCheckOwnership(); });
     window.addEventListener('beforeunload', () => { clearTimeout(monitorIdleTimeout); monitorReleaseLock(); });
-    
+
     initNewRequestsMonitor();
 
     const statusObserver = new MutationObserver(replaceStatusText);
@@ -868,7 +929,7 @@
         try {
             manageLogoutButton();
             if (window.location.pathname === '/admin/requests' || window.location.pathname === '/admin/requests/') {
-                relocateControlsAndQueues(); 
+                relocateControlsAndQueues();
                 enhanceListPage();
                 hideBlacklistedTickets();
             } else {
