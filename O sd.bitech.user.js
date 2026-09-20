@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         О sd.bitech
 // @namespace    http://tampermonkey.net/
-// @version      20260907.2
+// @version      20260920
 // @description  Видалення кнопки виходу. Компактні списки заявок. Ярлики. Моніторинг нових заявок + Звук и Фильтры + Системные уведомления
 // @author       Ovolsan
 // @match        *://sd.bitech.com.ua/*
