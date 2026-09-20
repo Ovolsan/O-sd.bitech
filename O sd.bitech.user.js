@@ -41,6 +41,21 @@
     }
 
     // =================================ПОИСК НИЖНЕГО КОНТЕЙНЕРА С КНОПКАМИ===========================
+    const queuesMenuLinks = new WeakSet();
+    function updateRequestsMenuLink() {
+        const queuesPath = '/admin/requests?presetId=my-queues';
+        document.querySelectorAll('a.dpl-aside-link[href="/admin/requests"], a.dpl-aside-link[href="/admin/requests?presetId=my-queues"]').forEach(link => {
+            if (link.getAttribute('href') !== queuesPath) link.setAttribute('href', queuesPath);
+            const label = [...link.childNodes].find(node => node.nodeType === Node.TEXT_NODE && node.textContent.trim());
+            if (label && label.textContent.trim() !== 'Черги') label.textContent = ' Черги ';
+            if (!queuesMenuLinks.has(link)) {
+                // Bypass Angular's original route while preserving native link navigation.
+                link.addEventListener('click', event => event.stopImmediatePropagation(), true);
+                queuesMenuLinks.add(link);
+            }
+        });
+    }
+
     function findBottomActionContainer() {
         const containers = [...document.querySelectorAll('div.flex.flex-wrap.gap-2.mb-3, div.flex.gap-2')].filter(container => {
             if (container.querySelector('app-badge-link')) return false;
@@ -107,7 +122,7 @@
             if (!fullName) {
                 fullName = Array.from(anchor.childNodes).filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent.trim()).join('').trim();
             }
-            if (fullName === 'Мої заявки') return;
+            if (fullName === 'Мої заявки' || fullName === 'Мої черги') return;
             let shortName = QUEUE_MAP[fullName] || (fullName.length > 10 ? fullName.substring(0, 10) : fullName);
 
             trackedSourceElements.push(anchor); // Запоминаем оригинальную очередь
@@ -254,6 +269,8 @@
     let afkAudioData = localStorage.getItem('sd_snd_afk') || null;
     let isNightMode = localStorage.getItem('sd_night_mode') === 'true';
     let currentAudio = null;
+    let currentUtterance = null;
+    let audioGeneration = 0;
     let isMenuOpen = false;
     let activeTab = null;
     let lastRenderedTab = null;
@@ -263,48 +280,72 @@
     function saveRequestFilterRules() { localStorage.setItem(REQUEST_FILTERS_KEY, JSON.stringify(requestFilterRules)); }
     function saveMuteRules() { localStorage.setItem('sd_mute_rules', JSON.stringify(muteRules)); }
 
-    function stopCurrentAudio() { if (currentAudio) { currentAudio.pause(); currentAudio = null; } }
+    function stopCurrentAudio() {
+        ++audioGeneration;
+        if (currentUtterance) {
+            currentUtterance.onend = null;
+            currentUtterance.onerror = null;
+            currentUtterance = null;
+        }
+        if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+        if (currentAudio) {
+            currentAudio.pause();
+            currentAudio = null;
+        }
+    }
+
+    function monitorDismissAlerts() {
+        stopCurrentAudio();
+        ++monitorNotificationGeneration;
+        document.querySelector('#ovolya-new-request-notification')?.remove();
+        monitorPendingTickets.clear();
+        monitorNotificationCount = 0;
+        monitorStopTitleBlink();
+        if (monitorBrowserNotification) {
+            try { monitorBrowserNotification.close(); } catch (e) { }
+            monitorBrowserNotification = null;
+        }
+        monitorUpdateDebug();
+    }
 
     // глобальный сброс
     document.addEventListener('click', (e) => {
-        if (e.target.closest('#ovolya-monitor-debug-container')) return;
-
-        if (e.isTrusted && currentAudio) stopCurrentAudio();
-
-        if (monitorNotificationCount > 0) {
-            const notif = document.querySelector('#ovolya-new-request-notification');
-            if (notif) notif.remove();
-
-            monitorPendingTickets.clear();
-            monitorNotificationCount = 0;
-            monitorStopTitleBlink();
-            monitorUpdateDebug();
-
-            if (monitorBrowserNotification) {
-                try { monitorBrowserNotification.close(); } catch(err) {}
-                monitorBrowserNotification = null;
-            }
-        }
+        if (e.isTrusted) monitorDismissAlerts();
     }, true);
 
     function playAlertSound(hasFirstCriticality = false, forceType = null) {
         stopCurrentAudio();
+        const generation = audioGeneration;
         const text = hasFirstCriticality ? 'заявки перша критичність' : 'заявки';
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'uk-UA'; utterance.rate = 0.8; utterance.volume = 1;
-
-        utterance.onend = () => {
+        let melodyStarted = false;
+        const playMelody = () => {
+            if (generation !== audioGeneration || melodyStarted) return;
+            melodyStarted = true;
+            currentUtterance = null;
             let audioData = null;
             if (forceType === 'std') audioData = standardAudioData;
             else if (forceType === 'afk') audioData = afkAudioData;
             else audioData = isNightMode ? afkAudioData : standardAudioData;
 
             if (!audioData) return;
-            currentAudio = new Audio(audioData);
-            currentAudio.play().catch(e => console.log('Autoplay blocked:', e));
-            currentAudio.onended = () => { currentAudio = null; };
+            try {
+                const audio = new Audio(audioData);
+                currentAudio = audio;
+                audio.play().catch(e => console.log('[sd.bitech] Audio playback failed:', e));
+                audio.onended = () => { if (currentAudio === audio) currentAudio = null; };
+            } catch (e) { console.log('[sd.bitech] Audio error:', e); }
         };
-        speechSynthesis.speak(utterance);
+        try {
+            const utterance = new SpeechSynthesisUtterance(text);
+            currentUtterance = utterance;
+            utterance.lang = 'uk-UA'; utterance.rate = 0.8; utterance.volume = 1;
+            utterance.onend = playMelody;
+            utterance.onerror = playMelody;
+            window.speechSynthesis.speak(utterance);
+        } catch (e) {
+            console.log('[sd.bitech] TTS error:', e);
+            playMelody();
+        }
     }
 
     // ======================Получение заявок======================================
@@ -368,7 +409,13 @@
     const MONITOR_KNOWN_IDS_KEY = 'ovolya_sd_new_requests_known_ids';
     const MONITOR_TIMER_MAX_SEC = 10 * 60;
     const MONITOR_ADD_TIME_ON_BLUR_SEC = 2 * 20;
-    const monitorToken = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const MONITOR_SESSION_KEY = 'ovolya_sd_monitor_resume';
+    let monitorResume = null;
+    try {
+        monitorResume = JSON.parse(sessionStorage.getItem(MONITOR_SESSION_KEY) || 'null');
+        sessionStorage.removeItem(MONITOR_SESSION_KEY);
+    } catch (e) { }
+    const monitorToken = monitorResume?.token || `${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
     let monitorIsOwner = false;
     let monitorTimeLeft = MONITOR_TIMER_MAX_SEC;
@@ -411,9 +458,9 @@
     function monitorWriteLock() { try { localStorage.setItem(MONITOR_LOCK_KEY, JSON.stringify({ token: monitorToken, expiresAt: Date.now() + 8000 })); return true; } catch (e) { return false; } }
 
     function monitorAcquireLock() {
-        // Захоплюємо lock лише на цільовій сторінці списку
-        if (!isMonitorTargetPage()) return false;
         const existing = monitorReadLock();
+        // The owner tab can resume its timer after navigation to any page.
+        if (!isMonitorTargetPage() && existing?.token !== monitorToken) return false;
         if (existing && existing.token !== monitorToken && existing.expiresAt > Date.now()) { monitorIsOwner = false; return false; }
         monitorWriteLock();
         monitorIsOwner = (monitorReadLock()?.token === monitorToken);
@@ -421,17 +468,51 @@
     }
 
     // Продовжуємо тримати lock навіть якщо користувач тимчасово пішов на іншу сторінку (напр. /create)
-    function monitorRenewLock() { if (monitorIsOwner) monitorWriteLock(); }
+    function monitorRenewLock() {
+        if (!monitorIsOwner) return;
+        const lock = monitorReadLock();
+        if (lock && lock.token !== monitorToken && lock.expiresAt > Date.now()) {
+            monitorIsOwner = false;
+            clearTimeout(monitorIdleTimeout);
+            return;
+        }
+        monitorWriteLock();
+    }
     function monitorReleaseLock() { try { if (monitorReadLock()?.token === monitorToken) localStorage.removeItem(MONITOR_LOCK_KEY); } catch (e) { } monitorIsOwner = false; }
     function monitorGetKnownIds() { const ids = monitorReadJSON(MONITOR_KNOWN_IDS_KEY, []); return Array.isArray(ids) ? ids.map(String) : []; }
     function monitorSaveKnownIds(ids) { const unique = [...new Set(ids.map(String))]; monitorWriteJSON(MONITOR_KNOWN_IDS_KEY, unique.slice(Math.max(0, unique.length - 1000))); }
 
+    let monitorTicketsChecked = false;
+    let monitorTicketsObserver = null;
+
+    function monitorWaitForTickets() {
+        if (monitorTicketsChecked || monitorTicketsObserver || !monitorIsOwner || !isMonitorTargetPage()) return;
+        const selector = '.request-column-content a[href^="/admin/requests/"]';
+        monitorTicketsObserver = new MutationObserver(records => {
+            // Ignore timer/UI changes; only newly rendered ticket links matter.
+            const hasTicketLinks = records.some(record => [...record.addedNodes].some(node =>
+                node.nodeType === 1 && (node.matches(selector) || node.querySelector(selector))
+            ));
+            if (hasTicketLinks) monitorCheckForNewTickets();
+        });
+        monitorTicketsObserver.observe(document.body, { childList: true, subtree: true });
+        // The table may already be rendered when monitoring starts.
+        monitorCheckForNewTickets();
+    }
+
     function monitorCheckForNewTickets() {
+        if (monitorTicketsChecked) return;
         if (!isMonitorTargetPage()) return;
         if (!monitorIsOwner) return;
+        if (monitorReadLock()?.token !== monitorToken) return;
 
         const currentTickets = getCurrentTickets();
         if (currentTickets.length === 0) return;
+
+        // Compare IDs only once per document load, then stop watching the DOM.
+        monitorTicketsChecked = true;
+        monitorTicketsObserver?.disconnect();
+        monitorTicketsObserver = null;
 
         const knownIds = monitorGetKnownIds();
         if (knownIds.length === 0) {
@@ -523,22 +604,14 @@
 
         const notification = document.createElement('div');
         notification.id = 'ovolya-new-request-notification';
-        notification.style.cssText = 'position:fixed;top:15px;right:15px;z-index:1000000;background:#26282f;color:#e8e8e8;border:1px solid #ffaa00;border-radius:6px;padding:12px 16px;min-width:230px;max-width:360px;box-shadow:0 4px 18px rgba(0,0,0,.45);font-family:Arial,sans-serif;font-size:14px;cursor:pointer;';
+        notification.style.cssText = 'position:fixed;top:15px;right:15px;z-index:1000000;background:#26282f;color:#e8e8e8;border:1px solid #ffaa00;padding:12px 16px;min-width:230px;max-width:360px;box-shadow:0 4px 18px rgba(0,0,0,.45);font-family:Arial,sans-serif;font-size:14px;cursor:pointer;';
 
         const title = document.createElement('div');
         title.style.cssText = 'font-weight:600;margin-bottom:7px;color:#ffaa00;';
         title.textContent = `🟠 Нових заявок: ${tickets.length}`;
         notification.append(title);
 
-        notification.addEventListener('click', () => {
-            notification.remove();
-            monitorPendingTickets.clear();
-            monitorNotificationCount = 0;
-            monitorStopTitleBlink();
-            monitorUpdateDebug();
-        });
         document.body.appendChild(notification);
-        setTimeout(() => { if (notification.isConnected) notification.remove(); }, 15000);
     }
 
     function monitorStartTitleBlink() {
@@ -558,18 +631,18 @@
     // =====================DEBUG / НАСТРОЙКИ UI =======================================
     function renderPanelContent(panel) {
         panel.innerHTML = '';
-        const btnActionStyle = 'background:#444; color:#fff; border:none; padding:6px 12px; cursor:pointer; border-radius:3px;';
+        const btnActionStyle = 'background:#444; color:#fff; border:none; padding:1px 9px; cursor:pointer;';
 
         if (activeTab === 'rules') {
             panel.innerHTML = `
         <div style="display:flex; gap:10px; margin-bottom:15px; align-items:center;">
-            <select id="ovolya-filter-type" style="background:#222; color:#fff; border:1px solid #555; padding:6px 10px; border-radius:3px;">
+            <select id="ovolya-filter-type" style="background:#222; color:#fff; border:1px solid #555; padding:6px 10px;">
                 <option value="title">Название</option>
                 <option value="department">Отдел</option>
                 <option value="id">ID</option>
             </select>
-            <input id="ovolya-filter-value" placeholder="Значение..." style="flex-grow:1; padding:6px 10px; background:#222; color:#fff; border:1px solid #555; border-radius:3px;">
-            <button id="ovolya-add-filter" style="background:#1e3a5f; color:#fff; border:none; padding:6px 12px; border-radius:3px; cursor:pointer;">Добавить</button>
+            <input id="ovolya-filter-value" placeholder="Значение..." style="flex-grow:1; padding:6px 10px; background:#222; color:#fff; border:1px solid #555;">
+            <button id="ovolya-add-filter" style="background:#1e3a5f; color:#fff; border:none; padding:6px 12px; cursor:pointer;">Добавить</button>
         </div>
         <table style="width:100%; border-collapse:collapse; text-align:left; font-family: sans-serif; font-size:13px;">
             <tr>
@@ -583,7 +656,7 @@
                     <td style="border:1px solid #444; padding:8px;">${requestFilterTypeNames[rule.type] || rule.type}</td>
                     <td style="border:1px solid #444; padding:8px; word-break: break-all;">${rule.text}</td>
                     <td style="border:1px solid #444; padding:8px; text-align:center;">
-                        <button class="ovolya-del-filter" data-idx="${idx}" style="background:#522; color:#fff; border:none; padding:4px 8px; border-radius:3px; cursor:pointer;">Удалить</button>
+                        <button class="ovolya-del-filter" data-idx="${idx}" style="background:#522; color:#fff; border:none; padding:4px 8px; cursor:pointer;">Удалить</button>
                     </td>
                 </tr>
             `).join('')}
@@ -628,7 +701,7 @@
                 : notifPermission === 'unsupported' ? 'Не поддерживается браузером ❌'
                 : 'Не запрошено ❌';
             panel.innerHTML = `
-                <div style="margin-bottom:15px; padding:10px; border:1px solid #444; background:#222; border-radius:4px; font-family: sans-serif;">
+                <div style="margin-bottom:15px; padding:10px; border:1px solid #444; background:#222; font-family: sans-serif;">
                     <h4 style="margin:0 0 5px 0;">Стандартная мелодия (☀️ День)</h4>
                     <p style="color:#888; font-size: 11px; margin:0 0 10px 0;">TTS "Заявки" + эта мелодия.</p>
                     <div style="display:flex; align-items:center; gap:10px;">
@@ -638,7 +711,7 @@
                         <button id="test_std" style="${btnActionStyle}">Тест</button>
                     </div>
                 </div>
-                <div style="padding:10px; border:1px solid #444; background:#222; border-radius:4px; font-family: sans-serif;">
+                <div style="padding:10px; border:1px solid #444; background:#222; font-family: sans-serif;">
                     <h4 style="margin:0 0 5px 0;">AFK Мелодия (🌙 Ночь)</h4>
                     <p style="color:#888; font-size: 11px; margin:0 0 10px 0;">TTS "Заявки" + эта мелодия (Ночной режим).</p>
                     <div style="display:flex; align-items:center; gap:10px;">
@@ -649,7 +722,7 @@
                     </div>
                 </div>
                 <p style="color:#ffaa00; font-size:11px; margin-top: 10px; font-family: sans-serif;">Файлы до 2 МБ. Звук останавливается кликом по странице.</p>
-                <div style="margin-top:15px; padding:10px; border:1px solid #444; background:#222; border-radius:4px; font-family: sans-serif;">
+                <div style="margin-top:15px; padding:10px; border:1px solid #444; background:#222;font-family: sans-serif;">
                     <h4 style="margin:0 0 5px 0;">Системные уведомления браузера</h4>
                     <p style="color:#888; font-size: 11px; margin:0 0 10px 0;">Всплывающее уведомление от ОС/браузера при новой заявке (отдельно от звука и попапа на странице).</p>
                     <div style="display:flex; align-items:center; gap:10px;">
@@ -695,15 +768,15 @@
         if (monitorDebugDiv) return;
         monitorDebugDiv = document.createElement('div');
         monitorDebugDiv.id = 'ovolya-monitor-debug-container';
-        monitorDebugDiv.style.cssText = `position: fixed; bottom: 10px; left: 10px; display: flex; flex-direction: column; z-index: 9998; user-select: none; font-family: sans-serif; font-size: 13px; align-items: flex-start;`;
+        monitorDebugDiv.style.cssText = `position: fixed; bottom: 1.2px; left: 1.2px; display: flex; flex-direction: column; z-index: 9998; user-select: none; font-family: sans-serif; font-size: 13px; align-items: flex-start;`;
 
         const panel = document.createElement('div');
         panel.id = 'ovolya-settings-panel';
-        panel.style.cssText = `display: none; background: #1a1a1a; border: 1px solid #444; width: 420px; max-height: 60vh; overflow-y: auto; padding: 15px; border-radius: 6px; margin-bottom: 5px; color: #ccc; box-shadow: 0 -4px 15px rgba(0,0,0,0.5);`;
+        panel.style.cssText = `display: none; background: #1a1a1a; border: 1px solid #444; width: 420px; max-height: 60vh; overflow-y: auto; padding: 15px; margin-bottom: 5px; color: #ccc; box-shadow: 0 -4px 15px rgba(0,0,0,0.5);`;
 
         const modeBtn = document.createElement('div');
         modeBtn.id = 'ovolya-mode-btn';
-        modeBtn.style.cssText = `display: none; background: #222; color: #fff; padding: 5px 12px; border: 1px solid #444; border-radius: 4px; cursor: pointer; width: max-content; margin-bottom: 5px;`;
+        modeBtn.style.cssText = `display: none; background: #222; color: #fff; padding: 5px 12px; border: 1px solid #444; cursor: pointer; width: max-content; margin-bottom: 5px;`;
         modeBtn.onclick = () => { isNightMode = !isNightMode; localStorage.setItem('sd_night_mode', isNightMode); monitorUpdateDebug(); };
 
         const bottomRow = document.createElement('div');
@@ -711,7 +784,7 @@
 
         const timerBtn = document.createElement('div');
         timerBtn.id = 'ovolya-monitor-timer-btn';
-        timerBtn.style.cssText = `background: #222; color: #0f0; padding: 5px 12px; font-family: monospace; border-radius: 4px; cursor: pointer; border: 1px solid #444; display: flex; align-items: center; justify-content: center; min-height: 28px; box-sizing: border-box;`;
+        timerBtn.style.cssText = `background: #222; color: #0f0; padding: 5px 12px; font-family: monospace; cursor: pointer; border: 1px solid #444; display: flex; align-items: center; justify-content: center; min-height: 28px; box-sizing: border-box;`;
         timerBtn.title = 'Настройки таймера и фильтров';
         timerBtn.onclick = () => {
             isMenuOpen = !isMenuOpen;
@@ -726,20 +799,20 @@
 
         const pinBtn = document.createElement('div');
         pinBtn.id = 'ovolya-monitor-pin-btn';
-        pinBtn.style.cssText = `background: #222; color: #fff; padding: 0 10px; cursor: pointer; border: 1px solid #444; border-radius: 4px; display: flex; align-items: center;`;
+        pinBtn.style.cssText = `background: #222; color: #fff; padding: 0 10px; cursor: pointer; border: 1px solid #444; display: flex; align-items: center;`;
         pinBtn.textContent = '📌';
         pinBtn.onclick = () => { if (isMonitorTargetPage()) { monitorWriteLock(); monitorCheckOwnership(); } };
 
         const btnRules = document.createElement('div');
         btnRules.id = 'ovolya-menu-rules-btn';
         btnRules.textContent = '🔕 Чёрный список';
-        btnRules.style.cssText = `display: none; color: #ccc; padding: 0 12px; cursor: pointer; border: 1px solid #444; border-radius: 4px; align-items: center;`;
+        btnRules.style.cssText = `display: none; color: #ccc; padding: 0 12px; cursor: pointer; border: 1px solid #444; align-items: center;`;
         btnRules.onclick = () => { activeTab = 'rules'; lastRenderedTab = null; monitorUpdateDebug(); };
 
         const btnSound = document.createElement('div');
         btnSound.id = 'ovolya-menu-sound-btn';
         btnSound.textContent = '🔊 Звук';
-        btnSound.style.cssText = `display: none; color: #ccc; padding: 0 12px; cursor: pointer; border: 1px solid #444; border-radius: 4px; align-items: center;`;
+        btnSound.style.cssText = `display: none; color: #ccc; padding: 0 12px; cursor: pointer; border: 1px solid #444; align-items: center;`;
         btnSound.onclick = () => { activeTab = 'settings'; lastRenderedTab = null; monitorUpdateDebug(); };
 
         monitorDebugDiv.append(panel, modeBtn, bottomRow);
@@ -823,6 +896,7 @@
                 monitorTimeLeft = 0;
                 monitorIsPaused = true;
                 monitorRenewLock();
+                if (!monitorIsOwner) return;
                 // Завжди повертаємо на цільову сторінку (навіть якщо користувач пішов на /create тощо)
                 goToMonitorTargetPage();
                 return;
@@ -832,12 +906,6 @@
     }, 1000);
 
     function monitorCheckOwnership() {
-        // Не відпускаємо lock при тимчасовому виході зі списку — таймер має повернути на TARGET_URL
-        if (!isMonitorTargetPage()) {
-            monitorUpdateDebug();
-            return;
-        }
-
         const lock = monitorReadLock();
         if (lock && lock.token !== monitorToken && lock.expiresAt > Date.now()) {
             if (monitorIsOwner) { monitorIsOwner = false; clearTimeout(monitorIdleTimeout); }
@@ -846,7 +914,7 @@
         if (!monitorIsOwner) {
             if (monitorAcquireLock()) {
                 monitorLastTick = Date.now(); monitorTimeLeft = MONITOR_TIMER_MAX_SEC;
-                monitorCheckForNewTickets();
+                monitorWaitForTickets();
             }
         }
         monitorUpdateDebug();
@@ -862,14 +930,17 @@
         }
 
         monitorCreateDebug();
-        if (isMonitorTargetPage()) {
-            monitorAcquireLock();
+        if (monitorAcquireLock() && monitorResume?.token === monitorToken && Number.isFinite(monitorResume.timeLeft)) {
+            monitorTimeLeft = monitorResume.timeLeft > 0
+                ? Math.min(monitorResume.timeLeft, MONITOR_TIMER_MAX_SEC)
+                : MONITOR_TIMER_MAX_SEC;
         }
+        monitorResume = null;
         monitorLastTick = Date.now();
         monitorUpdateDebug();
 
+        monitorWaitForTickets();
         setTimeout(() => {
-            if (monitorIsOwner && isMonitorTargetPage()) { monitorCheckForNewTickets(); }
             if (window.location.pathname.startsWith('/admin/requests')) {
                 hideBlacklistedTickets();
             }
@@ -899,7 +970,14 @@
     });
 
     window.addEventListener('storage', (e) => { if (e.key === MONITOR_LOCK_KEY) monitorCheckOwnership(); });
-    window.addEventListener('beforeunload', () => { clearTimeout(monitorIdleTimeout); monitorReleaseLock(); });
+    window.addEventListener('beforeunload', () => {
+        if (!monitorIsOwner || monitorReadLock()?.token !== monitorToken) return;
+        // Preserve ownership and remaining time in this tab across full navigation.
+        try {
+            sessionStorage.setItem(MONITOR_SESSION_KEY, JSON.stringify({ token: monitorToken, timeLeft: monitorTimeLeft }));
+        } catch (e) { }
+        monitorRenewLock();
+    });
 
     initNewRequestsMonitor();
 
@@ -928,6 +1006,7 @@
         observer.disconnect();
         try {
             manageLogoutButton();
+            updateRequestsMenuLink();
             if (window.location.pathname === '/admin/requests' || window.location.pathname === '/admin/requests/') {
                 relocateControlsAndQueues();
                 enhanceListPage();
