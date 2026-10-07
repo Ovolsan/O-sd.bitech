@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         О sd.bitech
 // @namespace    http://tampermonkey.net/
-// @version      20260920
-// @description  Видалення кнопки виходу. Компактні списки заявок. Ярлики. Моніторинг нових заявок + Звук и Фильтры + Системные уведомления
+// @version      20261007
+// @description  Кнопка виходу біля користувача в профілі. Компактні списки заявок. Ярлики. Моніторинг нових заявок + Звук и Фильтры + Системные уведомления
 // @author       Ovolsan
 // @match        *://sd.bitech.com.ua/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=bitech.com.ua
@@ -30,13 +30,63 @@
         'TETRA_Information': 'TETRA info'
     };
 
-    // ==============================УДАЛЕНИЕ КНОПКИ ВЫХОДА==============================
+    // ==============================КНОПКА ВЫХОДА В ПРОФИЛЕ==============================
+    let profileLogoutControl = null;
+    let profileLogoutOrigin = null;
+
     function manageLogoutButton() {
-        const logoutBtn = [...document.querySelectorAll('button')]
-            .find(b => b.querySelector('.fa-sign-out-alt') || b.textContent.trim() === "Вийти");
-        if (!logoutBtn) return;
-        if (!window.location.pathname.includes('/admin/profile')) {
-            logoutBtn.remove();
+        const headerButton = [...document.querySelectorAll('.dpl-header button')]
+            .find(button => button.querySelector('.fa-sign-out-alt') || button.textContent.trim() === 'Вийти');
+        // Переносим весь компонент PrimeNG, сохраняя его обработчик onClick.
+        const logoutControl = headerButton?.closest('p-button') || headerButton ||
+            (profileLogoutOrigin?.parent.isConnected ? profileLogoutControl : null);
+        if (!logoutControl) return;
+
+        if (logoutControl !== profileLogoutControl) {
+            profileLogoutControl = logoutControl;
+            profileLogoutOrigin = {
+                parent: logoutControl.parentNode,
+                nextSibling: logoutControl.nextSibling,
+                display: logoutControl.style.getPropertyValue('display'),
+                displayPriority: logoutControl.style.getPropertyPriority('display')
+            };
+        }
+
+        if (!/^\/admin\/profile\/?$/.test(window.location.pathname)) {
+            // При переходах Angular возвращаем кнопку в её исходный контейнер и скрываем.
+            const { parent, nextSibling } = profileLogoutOrigin;
+            if (parent.isConnected && logoutControl.parentNode !== parent) {
+                parent.insertBefore(logoutControl, nextSibling?.parentNode === parent ? nextSibling : null);
+            }
+            if (logoutControl.style.getPropertyValue('display') !== 'none') {
+                logoutControl.style.setProperty('display', 'none', 'important');
+            }
+            return;
+        }
+
+        const userInput = document.querySelector('app-profile-page app-user-form app-text-input[key="header"] input');
+        if (!userInput) {
+            // Форма может появиться позже панели; ждём следующей DOM-мутации.
+            logoutControl.style.setProperty('display', 'none', 'important');
+            return;
+        }
+
+        const userControl = userInput.closest('.disabled-wrapper') || userInput;
+        let row = userControl.closest('.ovolya-profile-user-row');
+        if (!row) {
+            row = document.createElement('div');
+            row.className = 'ovolya-profile-user-row';
+            row.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;width:max-content;max-width:100%;';
+            userControl.before(row);
+            row.appendChild(userControl);
+        }
+        if (logoutControl.parentNode !== row) row.appendChild(logoutControl);
+        const logoutButton = logoutControl.matches('button') ? logoutControl : logoutControl.querySelector('button');
+        if (logoutButton) logoutButton.type = 'button'; // Не отправлять форму профиля при выходе.
+        if (profileLogoutOrigin.display) {
+            logoutControl.style.setProperty('display', profileLogoutOrigin.display, profileLogoutOrigin.displayPriority);
+        } else {
+            logoutControl.style.removeProperty('display');
         }
     }
 

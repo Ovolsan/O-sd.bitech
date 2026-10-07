@@ -1,0 +1,12 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"name": "Tampermonkey Scripts",
+			"uri": "tampermonkeyFS:/"
+		}
+	],
+	"settings": {}
+}

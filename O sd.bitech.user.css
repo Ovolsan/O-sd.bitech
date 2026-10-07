@@ -1,0 +1,535 @@
+/* ==UserStyle==
+@name           О sd.bitech.com.ua
+@namespace      github.com/openstyles/stylus
+@version        20261007.2
+@description    Стиль для sd.bitech.com.ua. Прибирає таймери, робить зручний для очей дизайн. Приховані зайві паразитні індикатори. В заявці змінено розташування на компактне та інформативне. Деталі на https://github.com/Ovolsan/O-sd.bitech
+@author         Ovolya
+
+@preprocessor   less
+@var checkbox show-breadcrumbs "Показувати верхню панель (хлібні крихти та зворотний зв'язок)" 0
+==/UserStyle== */
+@-moz-document domain("sd.bitech.com.ua") {
+body {
+    background: #1e1f24 !important;
+    color: #cfd3da !important;
+}
+
+/* панели */
+.p-component,
+.card,
+.content,
+.table,
+div:not(#my-sla-timer):not(.p-drawer):not(.p-dialog):not(.p-overlaypanel):not(.p-drawer-mask):not(.p-dialog-mask):not(.p-overlay-mask) {
+    background-color: #26282f !important;
+}
+/*непонятная рамка вокруг окна таблицы*/
+.dpl-main, .rf-grid {
+          padding: 0rem 0rem !important;
+     }
+.request-column {
+    background: transparent !important;
+}
+
+/* текст */
+body,
+span,
+td,
+th,
+label {
+    color: #cfd3da !important;
+}
+    
+.p-panel-header {
+     color: #cfd3da !important;
+     padding-left: 0rem !important;
+     padding-right: 0rem !important;
+}
+
+.p-panel-toggleable .p-panel-header {
+    padding-top: .24rem;
+    padding-right: .2rem;
+    padding-bottom: .24rem;
+    padding-left: .2rem; 
+}
+     
+
+    /* активная кнопка очереди */
+.p-button.p-button-contrast {
+     color: #cfd3da !important;
+     background: #343741 !important;
+     width: 100%;
+}
+     /* количество заявок */
+.p-badge {
+    color: #cfd3da !important;
+}
+     
+/* Скрываем оригинальный контейнер с очередями (вне сайдбара) */
+div.flex.flex-wrap.gap-2.mb-3:has(app-badge-link) {
+    display: none !important;
+}
+
+/* 2. Скрытие количества заявок на очередях */
+app-badge-link p-badge,
+app-badge-link .p-badge {
+    display: none !important;
+}
+
+     /* таблицы */
+table {
+    border-collapse: separate !important;
+    border-spacing: 0;
+}
+
+td, th {
+    padding: 10px 14px !important;
+    border-bottom: 1px solid #32343b !important;
+}
+
+/* hover строки */
+tr:hover td {
+    background: #26282f !important;
+}
+
+/* статусы */
+.status-badge {
+    background: #3a3d45 !important;
+    color: #cfd3da !important;
+    border-radius: 0px !important;
+    padding: 4px 10px !important;
+    font-size: 12px !important;
+    font-weight: 500;
+    
+}
+     
+/* статус "Нова" */
+.status-badge[style*="255, 51, 0"]{
+    background:#34394d !important;
+    color:#ffd9a3 !important;
+}
+     
+     
+/* кнопки */
+.p-button {
+    border-radius: 0px !important;
+    border: none !important;
+     background: transparent !important;
+}
+.p-button:hover {
+    background: #40444f !important;
+}
+/*------------------------------------------ Левое меню */
+.sidebar,
+aside {
+    background: #1b1c21 !important;
+    border-right: 1px solid #30323a !important;
+}
+/* ========== КОМПАКТНОЕ ЛЕВОЕ МЕНЮ ========== */
+aside.dpl-aside .dpl-aside-group .dpl-aside-link[href] {
+    justify-content: flex-start !important;
+    text-align: left !important;
+     
+}
+.dpl-aside {
+        display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;    /* вместо возможного center */
+    direction: ltr !important; 
+     padding-top: 1px !important;
+}
+/* Основные пункты меню – блочная модель с левым выравниванием */
+.dpl-aside-link[href] {
+    display: block !important;
+    text-align: left !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    margin: 0 !important;
+    padding: 4px 6px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    font-size: 11px !important;
+}
+
+.dpl-aside-link[href] .dpl-aside-link-icon {
+    display: inline-block !important;
+    vertical-align: middle !important;
+    font-size: 14px !important;
+    margin-right: 4px !important;
+    flex-shrink: 0 !important;
+}
+     
+/* Родительские группы делаем флекс-колонками с растяжением */
+.dpl-aside-group {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+}
+
+/* Кнопки-вкладки – только иконки */
+.dpl-aside-link.dpl-aside-tab {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    padding: 6px !important;
+    margin: 2px 0 !important;
+    font-size: 0 !important;               /* скрывает весь текст внутри кнопки */
+}
+
+.dpl-aside-link.dpl-aside-tab .dpl-aside-link-icon {
+    font-size: 18px !important;            /* возвращаем размер иконке */
+    margin-right: 0 !important;
+}
+
+/* Для Angular-иконок (app-mdi-icon) – корректируем размер svg */
+.dpl-aside-link.dpl-aside-tab app-mdi-icon {
+    width: 18px !important;
+    height: 18px !important;
+}
+.dpl-aside-link.dpl-aside-tab app-mdi-icon svg {
+    width: 18px !important;
+    height: 18px !important;
+}
+
+/* Скрывать хлебные крошки, пока переключатель выключен */
+.dpl-header when (@show-breadcrumbs = 0) {
+    display: none !important;
+}  
+/* убрать логотип */
+.dpl-logo-link {
+    display: none !important;
+}
+/* убрать все field-name */
+.field-name {
+    display: none !important;
+}  
+/* стиль пунктов меню */
+.dpl-aside-link {
+    background: transparent !important;
+    color: #cfd3da !important;
+    border-radius: 0px;
+    padding: 8px 12px;
+    margin: 4px 8px;
+}
+/* hover */
+.dpl-aside-link:hover {
+    background: #2f323a !important;
+}
+/* активный пункт */
+.dpl-aside-link-active {
+    background: #343741 !important;
+    color: #e2e6ec !important;
+     border-left: 0px solid #e41360 !important;
+}
+/* иконки */
+.dpl-aside-link-icon {
+    color: #aeb4bd !important;
+    margin-right: 8px;
+}   
+/* ширина левого меню */
+aside,
+.dpl-aside,
+.layout-sidebar {
+    width: 85px !important;
+    min-width: 85px !important;
+}
+/* уменьшить отступы пунктов меню */
+.dpl-aside-link {
+    padding: 6px 10px !important;
+    font-size: 13px;
+}
+/* уменьшить иконки */
+.dpl-aside-link-icon {
+    font-size: 16px !important;
+}
+/* более аккуратный hover строки */
+.p-datatable-tbody > tr:hover {
+    background: #2c2f36 !important;
+}
+    /* выравнивание статусов */
+.status-badge {
+    font-size: 12px;
+    padding: 3px 8px !important;
+}
+    
+/* Скрывать только панель действий заявок, не строки заголовков других таблиц. */
+:is(app-requests-list, app-requests-list-legacy) .p-datatable-thead > tr:first-child:has(app-resource-list-action-bar) {
+    display: none !important;
+}
+    /* убрать кнопки раскрытия панелей (+) */
+.p-panel-toggle-button {
+    display: none !important;
+}
+/* убрать все property-name */
+.property-name {
+    display: none !important;
+}    
+/* ОБЩАЯ КОМПАКТНОСТЬ */
+.control-label,
+.fieldset {
+    margin-bottom: 6px !important;
+}
+
+.control-label-text {
+    font-size: 12px !important;
+    margin-bottom: 2px !important;
+}
+
+/* RADIO / CHECKBOX ГРУППЫ */
+.radio-button-group,
+.checkbox-group {
+    gap: 2px !important;
+}
+
+/* строки */
+.radio-button-label,
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 !important;
+    padding: 0px 0px;
+    border-radius: 0px;
+    transition: all 0.15s ease;
+}
+
+/* Не выбранные */
+.radio-button-label,
+.checkbox-label {
+    opacity: 0.55;
+    font-size: 12px;
+     border-radius: 0rem !important;
+}
+
+/* при наведении */
+.radio-button-label:hover,
+.checkbox-label:hover {
+    opacity: 0.8;
+}
+
+/* выбранные */
+.p-radiobutton-checked + .radio-button-label-text,
+.p-checkbox.p-highlight + .checkbox-label-text {
+    font-weight: 600;
+    opacity: 1;
+}
+
+/* подсветка строки если выбрано */
+.radio-button-label:has(.p-radiobutton-checked),
+.checkbox-label:has(.p-checkbox.p-highlight) {
+    background: rgba(0, 123, 255, 0.08);
+    opacity: 1;
+}
+
+/* кнопки чётче */
+.p-radiobutton-box,
+.p-checkbox-box {
+    width: 14px !important;
+    height: 14px !important;
+}
+
+/* выбранный radio */
+.p-radiobutton-checked .p-radiobutton-box {
+    border-width: 2px !important;
+}
+
+/* select / multiselect */
+.p-select,
+.p-multiselect {
+    min-height: 28px !important;
+    font-size: 12px !important;
+}
+
+/* текст внутри */
+.p-select-label,
+.p-multiselect-label {
+    padding: 4px 6px !important;
+}
+
+/* INPUT / TEXTAREA */
+input.p-inputtext,
+textarea.p-textarea {
+    padding: 4px 6px !important;
+    font-size: 12px !important;
+}
+
+/* IFRAME (описание) */
+.app-iframe iframe {
+    height: 200px !important;
+}
+/* Поле ввода описания статуса */    
+#statustxtTextarea {
+     width: 104% !important;
+     /* Заменяем height на min-height, чтобы поле могло расти вниз */
+     min-height: 57px !important; 
+     padding: 2px !important;
+     /* Принудительно возвращаем возможность растягивать поле (по вертикали) */
+     resize: vertical !important;
+}
+
+/* кнопка */
+.p-button {
+    padding: 4px 10px !important;
+    font-size: 12px !important;
+}
+
+/* убирает лишние поля */
+.fieldset {
+    padding: 4px 6px !important;
+}
+
+/* ЛЕГКОЕ УЖАТИЕ ЛЕЙБЛОВ */
+.radio-button-label-text,
+.checkbox-label-text {
+    line-height: 1.2;
+}
+app-iframe iframe {
+    filter: invert(1) hue-rotate(180deg);
+}
+     .p-tabpanels {
+    background: #26282f !important;
+}
+.p-datatable td, .p-datatable th {
+     white-space: nowrap !important;
+     overflow: hidden;
+}
+/* Статистика: сохранить оба уровня заголовков и объединённые ячейки.
+   Эти правила также перекрывают скрытие первой строки из старой версии стиля. */
+app-statistics-page .p-datatable .p-datatable-thead {
+    display: table-header-group !important;
+}
+app-statistics-page .p-datatable .p-datatable-thead > tr {
+    display: table-row !important;
+}
+app-statistics-page .p-datatable .p-datatable-thead > tr > th {
+    display: table-cell !important;
+    white-space: normal !important;
+    overflow: visible !important;
+}
+.p-datatable-tfoot td {
+     background: #26282f !important
+}
+/* убирает с "Назва заявки" блок на выделение */     
+#headerTextInput {
+      pointer-events: auto !important;
+      user-select: text !important;
+      opacity: 1 !important; /* disabled делает элемент полупрозрачным */
+}
+
+
+
+/* 4. Фикс z-index, чтобы фильтр и окна были всегда поверх таблиц */
+.p-dialog,
+.p-overlaypanel,
+.cdk-overlay-pane,
+.p-tieredmenu {
+    z-index: 99999 !important;
+}
+/* ========== ЯРЛЫКИ В САЙДБАРЕ (компактная сетка 2×2) ========== */
+#ovolya-custom-sidebar-container {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    width: 100% !important;
+    gap: 4px !important;               /* расстояние между элементами */
+    padding: 0px !important;
+    box-sizing: border-box !important;
+}
+
+.ovolya-shortcut-btn {
+    flex: 0 0 26px !important;         
+    width: 24px !important;
+    height: 24px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    background: transparent !important;
+    cursor: pointer;
+    color: #aeb4bd;
+    transition: color 0.2s, background 0.2s, border-radius 0.2s;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+.ovolya-shortcut-btn:hover {
+    color: #fff;
+    background: rgba(255,255,255,0.08);
+    border-radius: 0px;
+}
+
+.ovolya-shortcut-btn::before {
+    content: '';
+    width: 18px;
+    height: 18px;
+    background-color: currentColor;
+    -webkit-mask-size: cover;
+    mask-size: cover;
+     display: block;
+}
+
+/* Порядок: 1 ряд — Додати, Фільтр; 2 ряд — Редагувати, Інші дії */
+.ovolya-btn-add { order: 1; }
+.ovolya-btn-filter { order: 2; }
+.ovolya-btn-edit { order: 3; }
+.ovolya-btn-more { order: 4; }
+
+/* Иконки */
+.ovolya-btn-filter::before {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z'/%3E%3C/svg%3E");
+}
+.ovolya-btn-add::before {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z'/%3E%3C/svg%3E");
+}
+.ovolya-btn-edit::before {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z'/%3E%3C/svg%3E");
+}
+.ovolya-btn-more::before {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z'/%3E%3C/svg%3E");
+}
+     
+     /* Ярлыки очередей */
+.ovolya-queue-shortcut {
+    display: flex !important;
+    align-items: center !important;
+    width: 100% !important;
+    padding: 2px 6px !important;
+    margin: 0 !important;
+    font-size: 12px !important;
+    text-decoration: none !important;
+    color: #cfd3da !important;
+    background: transparent !important;
+    border: none !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+}
+#ovolya-custom-sidebar-container .ovolya-queue-shortcut.active {
+    background: #343741 !important;
+    color: #e2e6ec !important;
+}
+
+.ovolya-queue-shortcut:hover {
+    background: rgba(255,255,255,0.08) !important;
+    color: #fff !important;
+}
+
+/* Сам фильтр/дровер всегда поверх */
+.p-drawer,
+.p-dialog,
+.p-overlaypanel {
+    z-index: 2000 !important;
+}
+
+/* Убрать подчеркивание у гиперссылок на заявки */
+a[href*="/admin/requests/"],
+a[href*="/admin/requests/"]:hover {
+    text-decoration: none !important;
+}
+
+}
