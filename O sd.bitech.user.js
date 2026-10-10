@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         О sd.bitech
 // @namespace    http://tampermonkey.net/
-// @version      20261007
+// @version      20261010.4
 // @description  Кнопка виходу біля користувача в профілі. Компактні списки заявок. Ярлики. Моніторинг нових заявок + Звук и Фильтры + Системные уведомления
 // @author       Ovolsan
 // @match        *://sd.bitech.com.ua/*
@@ -12,6 +12,25 @@
 
 (function () {
     'use strict';
+    const REQUESTS_PAGE_SIZE = '100';
+    let requestsPageSizeNavigationPending = false;
+
+    function ensureRequestsPageSize() {
+        if (requestsPageSizeNavigationPending) return true;
+        if (!/^\/admin\/requests\/?$/.test(window.location.pathname)) return false;
+        const url = new URL(window.location.href);
+        if (url.searchParams.get('pageSize') === REQUESTS_PAGE_SIZE) return false;
+        // Angular читает размер страницы из URL, в том числе для пустых списков.
+        url.searchParams.set('pageSize', REQUESTS_PAGE_SIZE);
+        url.searchParams.set('currPage', '1');
+        requestsPageSizeNavigationPending = true;
+        window.location.replace(url.href);
+        return true;
+    }
+
+    // Нормализуем адрес до запуска мониторинга и обработки первоначального списка.
+    if (ensureRequestsPageSize()) return;
+
     let lastShortcutsSnapshot = '';
     let trackedSourceElements = []; // Массив для слежения за оригинальными элементами (не оторвал ли их Angular)
 
@@ -93,8 +112,8 @@
     // =================================ПОИСК НИЖНЕГО КОНТЕЙНЕРА С КНОПКАМИ===========================
     const queuesMenuLinks = new WeakSet();
     function updateRequestsMenuLink() {
-        const queuesPath = '/admin/requests?presetId=my-queues';
-        document.querySelectorAll('a.dpl-aside-link[href="/admin/requests"], a.dpl-aside-link[href="/admin/requests?presetId=my-queues"]').forEach(link => {
+        const queuesPath = `/admin/requests?presetId=my-queues&pageSize=${REQUESTS_PAGE_SIZE}`;
+        document.querySelectorAll('a.dpl-aside-link[href="/admin/requests"], a.dpl-aside-link[href="/admin/requests?presetId=my-queues"], a.dpl-aside-link[href="/admin/requests?presetId=my-queues&pageSize=100"]').forEach(link => {
             if (link.getAttribute('href') !== queuesPath) link.setAttribute('href', queuesPath);
             const label = [...link.childNodes].find(node => node.nodeType === Node.TEXT_NODE && node.textContent.trim());
             if (label && label.textContent.trim() !== 'Черги') label.textContent = ' Черги ';
@@ -305,11 +324,291 @@
     }
 
     // =========================НАСТРОЙКИ, ФИЛЬТРЫ И ЗВУК===================================
-    const requestFilterTypeNames = {
-        title: 'Название',
-        department: 'Отдел',
-        id: 'ID'
+    // Механизм языков Notifications APC 204: резерв, кеш, проверка JSON и загрузка.
+    const LANGUAGE_KEY = 'sd_lang';
+    let currentLang = localStorage.getItem(LANGUAGE_KEY) || 'uk';
+    const fallbackI18n = {
+        "uk": {
+            "langTitle": "Мова інтерфейсу / Язык интерфейса",
+            "filterType": "Тип фільтра",
+            "filterTitle": "Назва",
+            "filterDepartment": "Відділ",
+            "filterId": "ID",
+            "filterValue": "Значення фільтра",
+            "valuePlaceholder": "Значення…",
+            "add": "Додати",
+            "enabled": "Увімк.",
+            "type": "Тип",
+            "value": "Значення",
+            "action": "Дія",
+            "emptyFilters": "Список порожній",
+            "filterLabel": "Фільтр {0}: {1}",
+            "disableFilter": "Вимкнути фільтр",
+            "enableFilter": "Увімкнути фільтр",
+            "remove": "Видалити",
+            "invalidId": "ID заявки має містити лише цифри",
+            "duplicateFilter": "Такий фільтр уже існує",
+            "permissionGranted": "Дозволено ✓",
+            "permissionDenied": "Заблоковано вручну ⚠️",
+            "permissionUnsupported": "Не підтримується браузером ❌",
+            "permissionDefault": "Дозвіл не запитано ❌",
+            "stdSoundTitle": "Стандартна мелодія (Денний режим)",
+            "stdSoundDesc": "TTS \"Заявки\" + ця мелодія.",
+            "afkSoundTitle": "AFK Мелодія (Нічний режим)",
+            "afkSoundDesc": "TTS \"Заявки\" + ця мелодія (якщо увімкнено 🌙).",
+            "file": "Файл",
+            "fileLoaded": "Завантажено ✓",
+            "noFile": "Файл не вибрано",
+            "test": "Тест",
+            "soundNote": "Файли до 2 МБ. Звук зупиняється кліком по сторінці.",
+            "fileTooLarge": "Файл перевищує 2 МБ!",
+            "notificationsTitle": "Системні сповіщення браузера",
+            "notificationsDesc": "Сповіщення від ОС або браузера про нову заявку.",
+            "requestPermission": "Запитати",
+            "permissionHelp": "Сповіщення заблоковано вручну в браузері.\nВідкрий налаштування сайту (значок замка або інформації біля адреси) → Сповіщення → Дозволити, потім онови сторінку.",
+            "monitorSettings": "Налаштування моніторингу",
+            "pin": "Зробити цю вкладку вкладкою моніторингу",
+            "monitoring": "моніторинг",
+            "waiting": "очікування",
+            "paused": "Пауза",
+            "countdown": "Відлік",
+            "timerStatus": "Таймер: {0} | {1} | {2}",
+            "newCount": "Нових: {0}",
+            "nightMode": "Ніч (AFK). Увімкнути денний режим",
+            "dayMode": "День (Стандарт). Увімкнути нічний режим",
+            "debugTooltip": "Наведи курсор, щоб показати кнопки. Натисни на очі, щоб перемкнути денний/нічний режим.",
+            "filters": "Фільтри",
+            "soundSettings": "Налаштування звуку",
+            "closeMenu": "Закрити меню ({0})",
+            "newTickets": "Нових заявок: {0}",
+            "undefinedCriticality": "Невизначена",
+            "notificationBody": "Нових заявок: {0}\nКритичність: {1}",
+            "newTicketsTitle": "НОВІ ЗАЯВКИ",
+            "ttsTickets": "заявки",
+            "ttsCriticalTickets": "заявки перша критичність"
+        },
+        "ru": {
+            "langTitle": "Мова інтерфейсу / Язык интерфейса",
+            "filterType": "Тип фильтра",
+            "filterTitle": "Название",
+            "filterDepartment": "Отдел",
+            "filterId": "ID",
+            "filterValue": "Значение фильтра",
+            "valuePlaceholder": "Значение…",
+            "add": "Добавить",
+            "enabled": "Вкл.",
+            "type": "Тип",
+            "value": "Значение",
+            "action": "Действие",
+            "emptyFilters": "Список пуст",
+            "filterLabel": "Фильтр {0}: {1}",
+            "disableFilter": "Выключить фильтр",
+            "enableFilter": "Включить фильтр",
+            "remove": "Удалить",
+            "invalidId": "ID заявки должен содержать только цифры",
+            "duplicateFilter": "Такой фильтр уже существует",
+            "permissionGranted": "Разрешено ✓",
+            "permissionDenied": "Заблокировано вручную ⚠️",
+            "permissionUnsupported": "Не поддерживается браузером ❌",
+            "permissionDefault": "Не запрошено ❌",
+            "stdSoundTitle": "Стандартная мелодия (Дневной режим)",
+            "stdSoundDesc": "TTS \"Заявки\" + эта мелодия.",
+            "afkSoundTitle": "AFK Мелодия (Ночной режим)",
+            "afkSoundDesc": "TTS \"Заявки\" + эта мелодия (если включено 🌙).",
+            "file": "Файл",
+            "fileLoaded": "Загружено ✓",
+            "noFile": "Файл не выбран",
+            "test": "Тест",
+            "soundNote": "Файлы до 2 МБ. Звук останавливается кликом по странице.",
+            "fileTooLarge": "Файл превышает 2 МБ!",
+            "notificationsTitle": "Системные уведомления браузера",
+            "notificationsDesc": "Уведомление от ОС или браузера о новой заявке.",
+            "requestPermission": "Запросить",
+            "permissionHelp": "Уведомления заблокированы вручную в браузере.\nОткрой настройки сайта (значок замка или информации слева от адреса) → Уведомления → Разрешить, затем обнови страницу.",
+            "monitorSettings": "Настройки мониторинга",
+            "pin": "Сделать эту вкладку вкладкой мониторинга",
+            "monitoring": "мониторинг",
+            "waiting": "ожидание",
+            "paused": "Пауза",
+            "countdown": "Отсчёт",
+            "timerStatus": "Таймер: {0} | {1} | {2}",
+            "newCount": "Новых: {0}",
+            "nightMode": "Ночь (AFK). Включить дневной режим",
+            "dayMode": "День (Стандарт). Включить ночной режим",
+            "debugTooltip": "Наведите курсор, чтобы показать кнопки. Нажмите на глаза, чтобы переключить дневной/ночной режим.",
+            "filters": "Фильтры",
+            "soundSettings": "Настройки звука",
+            "closeMenu": "Закрыть меню ({0})",
+            "newTickets": "Новых заявок: {0}",
+            "undefinedCriticality": "Не определена",
+            "notificationBody": "Новых заявок: {0}\nКритичность: {1}",
+            "newTicketsTitle": "НОВЫЕ ЗАЯВКИ",
+            "ttsTickets": "заявки",
+            "ttsCriticalTickets": "заявки первая критичность"
+        }
     };
+    const LANGUAGE_BASE_URL = 'https://raw.githubusercontent.com/Ovolsan/O-sd.bitech/main/languages/';
+    const LANGUAGE_TIMEOUT_MS = 5000;
+    const LANGUAGE_MAX_BYTES = 128 * 1024;
+    const languageRequests = new Map();
+    const loadedLanguages = new Set();
+    const i18n = { uk: { ...fallbackI18n.uk }, ru: { ...fallbackI18n.ru } };
+    if (!Object.hasOwn(i18n, currentLang)) currentLang = 'uk';
+
+    function validateLanguage(pack, lang) {
+        if (!pack || typeof pack !== 'object' || Array.isArray(pack)) throw new Error('Invalid language JSON');
+        const translations = {};
+        for (const key of Object.keys(fallbackI18n[lang])) {
+            if (!Object.hasOwn(pack, key)) continue;
+            const value = pack[key];
+            if (typeof value !== 'string' || !value.trim() || value.length > 10000) {
+                throw new Error('Invalid translation: ' + key);
+            }
+            translations[key] = value;
+        }
+        if (!Object.keys(translations).length) throw new Error('Empty language JSON');
+        return translations;
+    }
+
+    // Сохранённый перевод доступен сразу, даже без подключения к GitHub.
+    for (const lang of Object.keys(i18n)) {
+        try {
+            const cached = localStorage.getItem('sd_i18n_v1_' + lang);
+            if (cached && cached.length <= LANGUAGE_MAX_BYTES) {
+                i18n[lang] = { ...fallbackI18n[lang], ...validateLanguage(JSON.parse(cached), lang) };
+            }
+        } catch (error) {
+            console.warn('[sd.bitech] Повреждён кеш перевода:', lang, error);
+        }
+    }
+
+    function requestLanguage(url) {
+        if (typeof GM_xmlhttpRequest === 'function') {
+            return new Promise((resolve, reject) => {
+                let handle;
+                let settled = false;
+                const complete = (error, text) => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(timeout);
+                    if (error) reject(error);
+                    else resolve(text);
+                };
+                // Собственный таймер нужен и для режима fetch внутри менеджера.
+                const timeout = setTimeout(() => {
+                    complete(new Error('Language request timeout'));
+                    try { handle?.abort(); } catch (error) { /* Ответ уже отменён. */ }
+                }, LANGUAGE_TIMEOUT_MS);
+                try {
+                    handle = GM_xmlhttpRequest({
+                        method: 'GET', url, anonymous: true, timeout: LANGUAGE_TIMEOUT_MS,
+                        headers: { Accept: 'application/json' },
+                        onload(response) {
+                            const text = response.responseText;
+                            if (response.status !== 200 || typeof text !== 'string' || text.length > LANGUAGE_MAX_BYTES) {
+                                complete(new Error('Language HTTP response: ' + response.status));
+                            } else complete(null, text);
+                        },
+                        onerror: () => complete(new Error('Language network error')),
+                        ontimeout: () => complete(new Error('Language request timeout')),
+                        onabort: () => complete(new Error('Language request aborted'))
+                    });
+                } catch (error) {
+                    complete(error);
+                }
+            });
+        }
+        // Резерв для менеджеров userscript без GM_xmlhttpRequest.
+        return (async () => {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), LANGUAGE_TIMEOUT_MS);
+            try {
+                const response = await fetch(url, { signal: controller.signal, cache: 'no-store', credentials: 'omit' });
+                if (!response.ok) throw new Error('Language HTTP response: ' + response.status);
+                const text = await response.text();
+                if (text.length > LANGUAGE_MAX_BYTES) throw new Error('Language file too large');
+                return text;
+            } finally {
+                clearTimeout(timeout);
+            }
+        })();
+    }
+
+    function loadLanguage(lang) {
+        if (!Object.hasOwn(fallbackI18n, lang) || loadedLanguages.has(lang)) return Promise.resolve();
+        if (languageRequests.has(lang)) return languageRequests.get(lang);
+        const request = (async () => {
+            try {
+                const text = await requestLanguage(LANGUAGE_BASE_URL + lang + '.json?_=' + Date.now());
+                const translations = validateLanguage(JSON.parse(text), lang);
+                i18n[lang] = { ...fallbackI18n[lang], ...translations };
+                loadedLanguages.add(lang);
+                try {
+                    localStorage.setItem('sd_i18n_v1_' + lang, JSON.stringify(translations));
+                } catch (error) {
+                    console.warn('[sd.bitech] Перевод загружен, но не сохранён:', error);
+                }
+                // Запоздавший ответ другого языка не меняет выбранный язык.
+                if (currentLang === lang) {
+                    refreshInterfaceLanguage();
+                }
+            } catch (error) {
+                console.warn('[sd.bitech] Используется резервный перевод:', lang, error);
+            } finally {
+                languageRequests.delete(lang);
+            }
+        })();
+        languageRequests.set(lang, request);
+        return request;
+    }
+
+    function t(key, ...args) {
+        const value = i18n[currentLang]?.[key] || fallbackI18n.uk[key] || key;
+        return value.replace(/\{(\d+)\}/g, (placeholder, index) =>
+            args[index] === undefined ? placeholder : String(args[index]));
+    }
+
+    function htmlT(key, ...args) { return escapePanelText(t(key, ...args)); }
+
+    function refreshInterfaceLanguage() {
+        const panel = monitorDebugDiv?.querySelector('#ovolya-settings-panel');
+        const focused = panel?.contains(document.activeElement) ? document.activeElement : null;
+        const focusedId = focused?.id;
+        const focusedFilter = focused?.matches('.ovolya-filter-switch') ? focused.dataset.idx : null;
+        const valueInput = panel?.querySelector('#ovolya-filter-value');
+        const draft = valueInput ? {
+            type: panel.querySelector('#ovolya-filter-type').value,
+            value: valueInput.value,
+            start: valueInput.selectionStart,
+            end: valueInput.selectionEnd
+        } : null;
+        lastRenderedTab = null;
+        monitorUpdateDebug();
+        if (draft && panel.querySelector('#ovolya-filter-value')) {
+            panel.querySelector('#ovolya-filter-type').value = draft.type;
+            const input = panel.querySelector('#ovolya-filter-value');
+            input.value = draft.value;
+            input.setSelectionRange(draft.start, draft.end);
+        }
+        const nextFocus = focusedId ? document.getElementById(focusedId)
+            : focusedFilter !== null ? panel?.querySelector(`.ovolya-filter-switch[data-idx="${focusedFilter}"]`) : null;
+        if (nextFocus) nextFocus.focus({ preventScroll: true });
+        if (monitorPendingTickets.size) monitorShowNotification([...monitorPendingTickets.values()]);
+    }
+
+    function setInterfaceLanguage(lang) {
+        if (!Object.hasOwn(fallbackI18n, lang)) return;
+        currentLang = lang;
+        localStorage.setItem(LANGUAGE_KEY, lang);
+        refreshInterfaceLanguage();
+        void loadLanguage(lang);
+    }
+
+    function requestFilterTypeName(type) {
+        const key = { title: 'filterTitle', department: 'filterDepartment', id: 'filterId' }[type];
+        return key ? t(key) : type;
+    }
+
     let muteRules = JSON.parse(localStorage.getItem('sd_mute_rules') || '[]');
     if (muteRules.length > 0 && typeof muteRules[0] === 'string') {
         muteRules = muteRules.map(text => ({ type: 'title', text }));
@@ -366,7 +665,7 @@
     function playAlertSound(hasFirstCriticality = false, forceType = null) {
         stopCurrentAudio();
         const generation = audioGeneration;
-        const text = hasFirstCriticality ? 'заявки перша критичність' : 'заявки';
+        const text = t(hasFirstCriticality ? 'ttsCriticalTickets' : 'ttsTickets');
         let melodyStarted = false;
         const playMelody = () => {
             if (generation !== audioGeneration || melodyStarted) return;
@@ -388,7 +687,7 @@
         try {
             const utterance = new SpeechSynthesisUtterance(text);
             currentUtterance = utterance;
-            utterance.lang = 'uk-UA'; utterance.rate = 0.8; utterance.volume = 1;
+            utterance.lang = currentLang === 'uk' ? 'uk-UA' : 'ru-RU'; utterance.rate = 0.8; utterance.volume = 1;
             utterance.onend = playMelody;
             utterance.onerror = playMelody;
             window.speechSynthesis.speak(utterance);
@@ -431,7 +730,7 @@
     // ======================Проверка заявки на фильтры======================================
     function isRequestFiltered(ticket) {
         for (const rule of requestFilterRules) {
-            if (!rule || !rule.type || !rule.text) continue;
+            if (!rule || rule.enabled === false || !rule.type || !rule.text) continue;
             const ruleText = String(rule.text).trim();
             if (!ruleText) continue;
             if (rule.type === 'title') {
@@ -454,7 +753,7 @@
     }
 
     // =================================Мониторинг заявок и таймер==========================
-    const TARGET_URL = 'https://sd.bitech.com.ua/admin/requests?presetId=my-queues';
+    const TARGET_URL = `https://sd.bitech.com.ua/admin/requests?presetId=my-queues&pageSize=${REQUESTS_PAGE_SIZE}`;
     const MONITOR_LOCK_KEY = 'ovolya_sd_new_requests_monitor_lock';
     const MONITOR_KNOWN_IDS_KEY = 'ovolya_sd_new_requests_known_ids';
     const MONITOR_TIMER_MAX_SEC = 10 * 60;
@@ -601,13 +900,13 @@
 
         const criticalityCounts = new Map();
         for (const ticket of tickets) {
-            const c = ticket.criticality?.trim() || 'Невизначена';
+            const c = ticket.criticality?.trim() || t('undefinedCriticality');
             criticalityCounts.set(c, (criticalityCounts.get(c) || 0) + 1);
         }
         const criticalityText = [...criticalityCounts.entries()]
             .map(([name, count]) => count > 1 ? `${name} (${count})` : name)
             .join(', ');
-        const body = `Нових заявок: ${tickets.length}\nКритичність: ${criticalityText}`;
+        const body = t('notificationBody', tickets.length, criticalityText);
         const generation = ++monitorNotificationGeneration;
 
         const showBrowserNotification = () => {
@@ -658,7 +957,7 @@
 
         const title = document.createElement('div');
         title.style.cssText = 'font-weight:600;margin-bottom:7px;color:#ffaa00;';
-        title.textContent = `🟠 Нових заявок: ${tickets.length}`;
+        title.textContent = `🟠 ${t('newTickets', tickets.length)}`;
         notification.append(title);
 
         document.body.appendChild(notification);
@@ -673,44 +972,57 @@
 
     function monitorStopTitleBlink() {
         monitorTitleBlinking = false;
-        if (document.title.includes('🟠 НОВЫЕ ЗАЯВКИ')) {
+        if (Object.values(i18n).some(pack => document.title === `🟠 ${pack.newTicketsTitle}`)) {
             document.title = monitorOriginalTitle;
         }
     }
 
     // =====================DEBUG / НАСТРОЙКИ UI =======================================
+    function escapePanelText(value) {
+        return String(value ?? '').replace(/[&<>"']/g, character => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[character]);
+    }
+
     function renderPanelContent(panel) {
         panel.innerHTML = '';
-        const btnActionStyle = 'background:#444; color:#fff; border:none; padding:1px 9px; cursor:pointer;';
+        const btnActionStyle = 'background:#35393b; color:#e8e6e3; border:0; padding:3px 6px; cursor:pointer; font:inherit; font-size:12px; line-height:1.2; white-space:nowrap; border-radius:0; margin:0;';
 
         if (activeTab === 'rules') {
             panel.innerHTML = `
-        <div style="display:flex; gap:10px; margin-bottom:15px; align-items:center;">
-            <select id="ovolya-filter-type" style="background:#222; color:#fff; border:1px solid #555; padding:6px 10px;">
-                <option value="title">Название</option>
-                <option value="department">Отдел</option>
-                <option value="id">ID</option>
+        <div class="ovolya-filter-form">
+            <select id="ovolya-filter-type" aria-label="${htmlT('filterType')}">
+                <option value="title">${htmlT('filterTitle')}</option>
+                <option value="department">${htmlT('filterDepartment')}</option>
+                <option value="id">${htmlT('filterId')}</option>
             </select>
-            <input id="ovolya-filter-value" placeholder="Значение..." style="flex-grow:1; padding:6px 10px; background:#222; color:#fff; border:1px solid #555;">
-            <button id="ovolya-add-filter" style="background:#1e3a5f; color:#fff; border:none; padding:6px 12px; cursor:pointer;">Добавить</button>
+            <input id="ovolya-filter-value" placeholder="${htmlT('valuePlaceholder')}" aria-label="${htmlT('filterValue')}">
+            <button type="button" id="ovolya-add-filter" style="${btnActionStyle} background:#1e3a5f;">${htmlT('add')}</button>
         </div>
-        <table style="width:100%; border-collapse:collapse; text-align:left; font-family: sans-serif; font-size:13px;">
-            <tr>
-                <th style="border:1px solid #444; padding:8px; background:#2a2a2a;">Тип</th>
-                <th style="border:1px solid #444; padding:8px; background:#2a2a2a;">Значение</th>
-                <th style="border:1px solid #444; padding:8px; background:#2a2a2a; width:80px;">Действие</th>
-            </tr>
-            ${requestFilterRules.length === 0 ? `<tr><td colspan="3" style="border:1px solid #444; padding:8px; text-align:center; color:#888;">Список пуст</td></tr>` : ''}
+        <table class="ovolya-filter-table">
+            <thead><tr>
+                <th scope="col">${htmlT('enabled')}</th><th scope="col">${htmlT('type')}</th>
+                <th scope="col">${htmlT('value')}</th><th scope="col">${htmlT('action')}</th>
+            </tr></thead><tbody>
+            ${requestFilterRules.length === 0 ? `<tr><td colspan="4" class="ovolya-empty-filters">${htmlT('emptyFilters')}</td></tr>` : ''}
             ${requestFilterRules.map((rule, idx) => `
-                <tr>
-                    <td style="border:1px solid #444; padding:8px;">${requestFilterTypeNames[rule.type] || rule.type}</td>
-                    <td style="border:1px solid #444; padding:8px; word-break: break-all;">${rule.text}</td>
-                    <td style="border:1px solid #444; padding:8px; text-align:center;">
-                        <button class="ovolya-del-filter" data-idx="${idx}" style="background:#522; color:#fff; border:none; padding:4px 8px; cursor:pointer;">Удалить</button>
+                <tr data-enabled="${rule.enabled !== false}">
+                    <td class="ovolya-filter-state">
+                        <button type="button" class="ovolya-filter-switch" role="switch" data-idx="${idx}"
+                            aria-checked="${rule.enabled !== false}"
+                            aria-label="${htmlT('filterLabel', requestFilterTypeName(rule.type), rule.text)}"
+                            title="${htmlT(rule.enabled !== false ? 'disableFilter' : 'enableFilter')}">
+                            <span aria-hidden="true"></span>
+                        </button>
+                    </td>
+                    <td class="ovolya-filter-type">${escapePanelText(requestFilterTypeName(rule.type))}</td>
+                    <td class="ovolya-filter-text">${escapePanelText(rule.text)}</td>
+                    <td class="ovolya-filter-action">
+                        <button type="button" class="ovolya-del-filter" data-idx="${idx}" style="${btnActionStyle} background:#522;">${htmlT('remove')}</button>
                     </td>
                 </tr>
             `).join('')}
-        </table>
+        </tbody></table>
     `;
 
             panel.querySelector('#ovolya-add-filter').onclick = () => {
@@ -719,21 +1031,33 @@
                 if (!text) return;
 
                 if (type === 'id' && !/^\d+$/.test(text)) {
-                    alert('ID заявки должен содержать только цифры');
+                    alert(t('invalidId'));
                     return;
                 }
 
                 if (requestFilterRules.some(r => r.type === type && r.text.toLowerCase() === text.toLowerCase())) {
-                    alert('Такой фильтр уже существует');
+                    alert(t('duplicateFilter'));
                     return;
                 }
 
-                requestFilterRules.push({ type, text });
+                requestFilterRules.push({ type, text, enabled: true });
                 saveRequestFilterRules();
                 lastRenderedTab = null;
                 monitorUpdateDebug();
                 hideBlacklistedTickets();
             };
+
+            panel.querySelectorAll('.ovolya-filter-switch').forEach(button => {
+                button.onclick = () => {
+                    const rule = requestFilterRules[Number(button.dataset.idx)];
+                    rule.enabled = rule.enabled === false;
+                    saveRequestFilterRules();
+                    button.setAttribute('aria-checked', String(rule.enabled));
+                    button.title = t(rule.enabled ? 'disableFilter' : 'enableFilter');
+                    button.closest('tr').dataset.enabled = String(rule.enabled);
+                    hideBlacklistedTickets();
+                };
+            });
 
             panel.querySelectorAll('.ovolya-del-filter').forEach(btn => {
                 btn.onclick = () => {
@@ -746,50 +1070,62 @@
             });
         } else if (activeTab === 'settings') {
             const notifPermission = ('Notification' in window) ? Notification.permission : 'unsupported';
-            const notifStatusText = notifPermission === 'granted' ? 'Разрешено ✓'
-                : notifPermission === 'denied' ? 'Заблокировано вручную ⚠️'
-                : notifPermission === 'unsupported' ? 'Не поддерживается браузером ❌'
-                : 'Не запрошено ❌';
+            const notifStatusText = notifPermission === 'granted' ? t('permissionGranted')
+                : notifPermission === 'denied' ? t('permissionDenied')
+                : notifPermission === 'unsupported' ? t('permissionUnsupported')
+                : t('permissionDefault');
             panel.innerHTML = `
-                <div style="margin-bottom:15px; padding:10px; border:1px solid #444; background:#222; font-family: sans-serif;">
-                    <h4 style="margin:0 0 5px 0;">Стандартная мелодия (☀️ День)</h4>
-                    <p style="color:#888; font-size: 11px; margin:0 0 10px 0;">TTS "Заявки" + эта мелодия.</p>
-                    <div style="display:flex; align-items:center; gap:10px;">
+                <div class="ovolya-settings-content">
+                <p class="ovolya-monitor-status"></p>
+                <section class="ovolya-setting-section">
+                    <h4>${htmlT('langTitle')}</h4>
+                    <div class="ovolya-setting-actions">
+                        <button type="button" id="ovolya-lang-uk" lang="uk" aria-pressed="${currentLang === 'uk'}" style="${btnActionStyle} background:${currentLang === 'uk' ? '#1e3a60' : '#35393b'};">Українська <small>UA</small></button>
+                        <button type="button" id="ovolya-lang-ru" lang="ru" aria-pressed="${currentLang === 'ru'}" style="${btnActionStyle} background:${currentLang === 'ru' ? '#1e3a60' : '#35393b'};">Русский <small>RU</small></button>
+                    </div>
+                </section>
+                <section class="ovolya-setting-section">
+                    <h4>${htmlT('stdSoundTitle')}</h4>
+                    <p>${htmlT('stdSoundDesc')}</p>
+                    <div class="ovolya-setting-actions">
                         <input type="file" id="file_std" accept="audio/*" style="display:none;">
-                        <button id="btn_std" style="${btnActionStyle} background:#333; border:1px solid #555;">Файл</button>
-                        <span style="color:#888; font-size:11px; flex-grow:1;">${standardAudioData ? 'Загружено ✓' : 'Нет файла ❌'}</span>
-                        <button id="test_std" style="${btnActionStyle}">Тест</button>
+                        <button type="button" id="btn_std" style="${btnActionStyle} background:#35393b;">${htmlT('file')}</button>
+                        <span style="color:#9d9588; font-size:11px; flex-grow:1;">${htmlT(standardAudioData ? 'fileLoaded' : 'noFile')}</span>
+                        <button type="button" id="test_std" style="${btnActionStyle}">${htmlT('test')}</button>
                     </div>
-                </div>
-                <div style="padding:10px; border:1px solid #444; background:#222; font-family: sans-serif;">
-                    <h4 style="margin:0 0 5px 0;">AFK Мелодия (🌙 Ночь)</h4>
-                    <p style="color:#888; font-size: 11px; margin:0 0 10px 0;">TTS "Заявки" + эта мелодия (Ночной режим).</p>
-                    <div style="display:flex; align-items:center; gap:10px;">
+                </section>
+                <section class="ovolya-setting-section">
+                    <h4>${htmlT('afkSoundTitle')}</h4>
+                    <p>${htmlT('afkSoundDesc')}</p>
+                    <div class="ovolya-setting-actions">
                         <input type="file" id="file_afk" accept="audio/*" style="display:none;">
-                        <button id="btn_afk" style="${btnActionStyle} background:#333; border:1px solid #555;">Файл</button>
-                        <span style="color:#888; font-size:11px; flex-grow:1;">${afkAudioData ? 'Загружено ✓' : 'Нет файла ❌'}</span>
-                        <button id="test_afk" style="${btnActionStyle}">Тест</button>
+                        <button type="button" id="btn_afk" style="${btnActionStyle} background:#35393b;">${htmlT('file')}</button>
+                        <span style="color:#9d9588; font-size:11px; flex-grow:1;">${htmlT(afkAudioData ? 'fileLoaded' : 'noFile')}</span>
+                        <button type="button" id="test_afk" style="${btnActionStyle}">${htmlT('test')}</button>
                     </div>
-                </div>
-                <p style="color:#ffaa00; font-size:11px; margin-top: 10px; font-family: sans-serif;">Файлы до 2 МБ. Звук останавливается кликом по странице.</p>
-                <div style="margin-top:15px; padding:10px; border:1px solid #444; background:#222;font-family: sans-serif;">
-                    <h4 style="margin:0 0 5px 0;">Системные уведомления браузера</h4>
-                    <p style="color:#888; font-size: 11px; margin:0 0 10px 0;">Всплывающее уведомление от ОС/браузера при новой заявке (отдельно от звука и попапа на странице).</p>
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <span id="notif_status" style="color:#888; font-size:11px; flex-grow:1;">${notifStatusText}</span>
-                        <button id="btn_notif_request" style="${btnActionStyle}">Запросить</button>
+                </section>
+                <p class="ovolya-sound-note">${htmlT('soundNote')}</p>
+                <section class="ovolya-setting-section">
+                    <h4>${htmlT('notificationsTitle')}</h4>
+                    <p>${htmlT('notificationsDesc')}</p>
+                    <div class="ovolya-setting-actions">
+                        <span id="notif_status" style="color:#9d9588; font-size:11px; flex-grow:1;">${escapePanelText(notifStatusText)}</span>
+                        <button type="button" id="btn_notif_request" style="${btnActionStyle}">${htmlT('requestPermission')}</button>
                     </div>
-                </div>
+                </section></div>
             `;
+            panel.querySelector('#ovolya-lang-uk').onclick = () => setInterfaceLanguage('uk');
+            panel.querySelector('#ovolya-lang-ru').onclick = () => setInterfaceLanguage('ru');
             const handleFile = (inputObj, storageKey, varName) => {
                 if (inputObj.files.length === 0) return;
                 const file = inputObj.files[0];
-                if (file.size > 2.5 * 1024 * 1024) { alert('Файл >2 МБ!'); return; }
+                if (file.size > 2.5 * 1024 * 1024) { alert(t('fileTooLarge')); return; }
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     localStorage.setItem(storageKey, e.target.result);
                     if (varName === 'std') standardAudioData = e.target.result;
                     if (varName === 'afk') afkAudioData = e.target.result;
+                    lastRenderedTab = null;
                     monitorUpdateDebug();
                 };
                 reader.readAsDataURL(file);
@@ -803,7 +1139,7 @@
             panel.querySelector(`#btn_notif_request`).onclick = () => {
                 if (!('Notification' in window)) return;
                 if (Notification.permission === 'denied') {
-                    alert('Уведомления заблокированы вручную в браузере.\nОткрой настройки сайта (значок замка/инфо слева от адреса) → Уведомления → Разрешить, затем обнови страницу.');
+                    alert(t('permissionHelp'));
                     return;
                 }
                 Notification.requestPermission().then(() => {
@@ -814,110 +1150,231 @@
         }
     }
 
+    const monitorMenuIcons = {
+        rules: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h18l-7 8v6l-4 2v-8Z"/></svg>',
+        settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 3-.7 3-2 .9-2.7-.9-2 3.5 2.1 2v2l-2.1 2 2 3.5 2.7-.9 2 .9L9 22h4l.7-3 2-.9 2.7.9 2-3.5-2.1-2v-2l2.1-2-2-3.5-2.7.9-2-.9L13 3Z" transform="translate(1 -.5) scale(.95)"/><circle cx="12" cy="12" r="3"/></svg>',
+        close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>',
+        sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M19 5l-1.5 1.5m-11 11L5 19"/></svg>',
+        moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14a8.7 8.7 0 0 1-10-10A8.7 8.7 0 1 0 20 14Z"/></svg>',
+        pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 3 8 2-2 6 3 4-6-1-4 3-1-5 4-3Z"/><path d="m9 15-5 6"/></svg>'
+    };
+    let monitorDockHovered = false;
+    let monitorDockFocused = false;
+    let monitorDockSuppressReveal = false;
+
+    function monitorUpdateDockVisibility() {
+        if (!monitorDebugDiv) return;
+        const dock = monitorDebugDiv.querySelector('.ovolya-monitor-dock');
+        const navigation = dock.querySelector('.ovolya-monitor-navigation');
+        const expanded = isMenuOpen || !window.matchMedia('(hover:hover)').matches ||
+            (!monitorDockSuppressReveal && (monitorDockHovered || monitorDockFocused));
+        dock.dataset.expanded = String(expanded);
+        navigation.setAttribute('aria-hidden', String(!expanded));
+        navigation.querySelectorAll('button').forEach(button => { button.tabIndex = expanded ? 0 : -1; });
+    }
+
+    function monitorCloseMenu() {
+        isMenuOpen = false;
+        monitorDockSuppressReveal = true;
+        monitorUpdateDebug();
+        if (monitorDebugDiv.contains(document.activeElement)) {
+            monitorDebugDiv.querySelector('#ovolya-monitor-timer-btn').focus({ preventScroll: true });
+        }
+    }
+
+    function monitorOpenSection(tab) {
+        if (isMenuOpen && activeTab === tab) {
+            monitorCloseMenu();
+            return;
+        }
+        isMenuOpen = true;
+        monitorDockSuppressReveal = false;
+        activeTab = tab;
+        lastRenderedTab = null;
+        monitorUpdateDebug();
+        monitorDebugDiv.querySelector('#ovolya-settings-panel').scrollTop = 0;
+    }
+
     function monitorCreateDebug() {
         if (monitorDebugDiv) return;
+        const style = document.createElement('style');
+        style.id = 'ovolya-monitor-menu-style';
+        // Оформление версии 20261010.2; фон кнопки с глазами прозрачен.
+        // Собственные фоны открытых панелей сохраняются.
+        style.textContent = `
+            #ovolya-monitor-debug-container { position:fixed; bottom:0; left:0; display:flex; flex-direction:column; align-items:flex-start; gap:0; padding:0; margin:0; z-index:9998; font:13px sans-serif; color:#c8c3bc; max-width:calc(100vw - 2px); max-height:calc(100vh - 2px); max-height:calc(100dvh - 2px); min-height:0; }
+            #ovolya-monitor-debug-container [hidden] { display:none !important; }
+            #ovolya-monitor-debug-container #ovolya-settings-panel { display:none; background:#272a2c; color:#c8c3bc; border:0; max-width:calc(100vw - 2px); max-height:calc(100vh - 34px); max-height:calc(100dvh - 34px); min-height:0; flex:0 1 auto; overflow:auto; overscroll-behavior:contain; padding:0; margin:0; box-sizing:border-box; box-shadow:none; }
+            #ovolya-monitor-debug-container .ovolya-monitor-dock { display:flex; flex:0 0 auto; align-items:stretch; gap:0; padding:0; margin:0; height:32px; max-width:100%; }
+            #ovolya-monitor-debug-container .ovolya-monitor-dock button { display:flex; position:relative; align-items:center; justify-content:center; flex:0 0 36px; width:36px; height:32px; min-width:0; min-height:0; margin:0; padding:0; border:0; border-radius:0; box-sizing:border-box; background:#272a2c; color:#c8c3bc; cursor:pointer; font:inherit; line-height:1; transition:background .2s ease,color .2s ease; }
+            #ovolya-monitor-debug-container button:hover { filter:brightness(1.15); }
+            #ovolya-monitor-debug-container button:focus-visible, #ovolya-monitor-debug-container input:focus-visible, #ovolya-monitor-debug-container select:focus-visible { outline:2px solid #86b9ff; outline-offset:-2px; }
+            #ovolya-monitor-debug-container #ovolya-monitor-timer-btn { flex-basis:48px; width:48px; background:transparent; color:#a5e4ba; }
+            #ovolya-monitor-debug-container #ovolya-monitor-timer-btn[data-paused="true"] { color:#b8c0ca; }
+            #ovolya-monitor-debug-container #ovolya-monitor-timer-btn[data-unread="true"] { color:#ffbf62; }
+            #ovolya-monitor-debug-container .ovolya-timer-eyes { width:36px; height:24px; transition:opacity .2s ease; }
+            #ovolya-monitor-debug-container .ovolya-eye-open { transform-box:view-box; transform-origin:0 12px; animation:ovolya-eye-blink 8s ease-in-out infinite; }
+            #ovolya-monitor-debug-container .ovolya-eye-pupil { animation:ovolya-eye-look 12s ease-in-out infinite; }
+            #ovolya-monitor-debug-container .ovolya-eye-closed { opacity:0; animation:ovolya-eye-lids 8s ease-in-out infinite; }
+            #ovolya-monitor-debug-container #ovolya-monitor-timer-btn[data-paused="true"] :is(.ovolya-eye-open,.ovolya-eye-pupil,.ovolya-eye-closed) { animation:none; }
+            #ovolya-monitor-debug-container #ovolya-monitor-timer-btn[data-paused="true"] .ovolya-eye-open { opacity:0; }
+            #ovolya-monitor-debug-container #ovolya-monitor-timer-btn[data-paused="true"] .ovolya-eye-closed { opacity:1; }
+            #ovolya-monitor-debug-container .ovolya-monitor-navigation { display:flex; flex:0 0 auto; width:max-content; max-width:0; opacity:0; overflow:hidden; visibility:hidden; pointer-events:none; transform:translateX(-6px); transition:max-width .28s ease,opacity .2s ease,transform .28s ease,visibility 0s .28s; }
+            #ovolya-monitor-debug-container .ovolya-monitor-dock[data-expanded="true"] .ovolya-monitor-navigation { max-width:108px; opacity:1; visibility:visible; pointer-events:auto; transform:translateX(0); transition-delay:0s; }
+            #ovolya-monitor-debug-container .ovolya-monitor-navigation svg { display:block; width:19px; height:19px; }
+            #ovolya-monitor-debug-container .ovolya-nav-close { display:none; }
+            #ovolya-monitor-debug-container .ovolya-monitor-dock button[data-current="true"] { background:#4c252b; color:#ffb7be; }
+            #ovolya-monitor-debug-container button[data-current="true"] .ovolya-nav-icon { display:none; }
+            #ovolya-monitor-debug-container button[data-current="true"] .ovolya-nav-close { display:block; }
+            #ovolya-monitor-debug-container .ovolya-mode-overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#ffd180; opacity:0; transition:opacity .2s ease; pointer-events:none; }
+            #ovolya-monitor-debug-container .ovolya-mode-overlay svg { display:block; width:19px; height:19px; }
+            #ovolya-monitor-debug-container #ovolya-monitor-timer-btn[data-night="true"] .ovolya-mode-overlay { color:#c5d0ff; }
+            #ovolya-monitor-debug-container #ovolya-monitor-timer-btn:is(:hover,:focus-visible) .ovolya-mode-overlay { opacity:1; }
+            #ovolya-monitor-debug-container #ovolya-monitor-timer-btn:is(:hover,:focus-visible) .ovolya-timer-eyes { opacity:.12; }
+            #ovolya-monitor-debug-container .ovolya-moon-icon { display:none; }
+            #ovolya-monitor-debug-container #ovolya-monitor-timer-btn[data-night="true"] .ovolya-sun-icon { display:none; }
+            #ovolya-monitor-debug-container #ovolya-monitor-timer-btn[data-night="true"] .ovolya-moon-icon { display:block; }
+            #ovolya-monitor-debug-container .ovolya-unread-badge { position:absolute; top:1px; right:1px; min-width:10px; padding:1px 2px; background:#ffb74d; color:#17191c; font:700 9px/1 sans-serif; border-radius:6px; pointer-events:none; }
+            #ovolya-monitor-debug-container .ovolya-filter-form { display:flex; flex-wrap:wrap; gap:4px; align-items:center; padding:6px; margin:0; }
+            #ovolya-monitor-debug-container .ovolya-filter-form :is(input,select) { background:#35393b; color:#e8e6e3; border:1px solid #3e4446; padding:3px 6px; font:inherit; box-sizing:border-box; border-radius:0; margin:0; height:26px; }
+            #ovolya-monitor-debug-container #ovolya-filter-value { flex:1; min-width:120px; }
+            #ovolya-monitor-debug-container .ovolya-filter-table { width:100%; min-width:380px; margin:0; border:0; border-collapse:collapse; table-layout:auto; text-align:left; font:inherit; }
+            #ovolya-monitor-debug-container .ovolya-filter-table th { border:0; padding:3px 6px; background:#2b2f31; color:#e8e6e3; font:inherit; font-weight:bold; white-space:nowrap; position:sticky; top:0; z-index:1; }
+            #ovolya-monitor-debug-container .ovolya-filter-table td { border:0; padding:3px 6px; font:inherit; line-height:1.35; vertical-align:top; }
+            #ovolya-monitor-debug-container :is(.ovolya-filter-state,.ovolya-filter-type,.ovolya-filter-action) { width:1%; white-space:nowrap; }
+            #ovolya-monitor-debug-container .ovolya-filter-state, #ovolya-monitor-debug-container .ovolya-filter-action { text-align:center; }
+            #ovolya-monitor-debug-container .ovolya-filter-text { overflow-wrap:anywhere; }
+            #ovolya-monitor-debug-container .ovolya-filter-table tr[data-enabled="false"] :is(.ovolya-filter-type,.ovolya-filter-text) { color:#7e8791; }
+            #ovolya-monitor-debug-container .ovolya-empty-filters { text-align:center; color:#9d9588; }
+            #ovolya-monitor-debug-container .ovolya-filter-switch { display:inline-flex; position:relative; width:28px; height:16px; min-width:28px; margin:0; padding:0; border:0; border-radius:10px; background:#525963; cursor:pointer; vertical-align:middle; }
+            #ovolya-monitor-debug-container .ovolya-filter-switch span { position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%; background:#e2e7ed; transition:transform .15s ease; }
+            #ovolya-monitor-debug-container .ovolya-filter-switch[aria-checked="true"] { background:#438560; }
+            #ovolya-monitor-debug-container .ovolya-filter-switch[aria-checked="true"] span { transform:translateX(12px); }
+            #ovolya-monitor-debug-container .ovolya-settings-content { padding:6px; display:flex; flex-direction:column; gap:8px; }
+            #ovolya-monitor-debug-container .ovolya-setting-section { margin:0; padding:0; border:0; background:#2b2f31; }
+            #ovolya-monitor-debug-container .ovolya-setting-section h4 { margin:0 0 4px; padding:0; border:0; font:700 14px sans-serif; color:inherit; }
+            #ovolya-monitor-debug-container .ovolya-setting-section p { margin:0 0 4px; color:#9d9588; font-size:12px; }
+            #ovolya-monitor-debug-container .ovolya-setting-actions { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:0; }
+            #ovolya-monitor-debug-container :is(.ovolya-monitor-status,.ovolya-sound-note) { margin:0; font-size:12px; overflow-wrap:anywhere; }
+            #ovolya-monitor-debug-container .ovolya-monitor-status { color:#b3aca2; }
+            #ovolya-monitor-debug-container .ovolya-sound-note { color:#ffaa00; }
+            @keyframes ovolya-eye-blink { 0%,10%,20%,100% { transform:scaleY(1); } 14%,16% { transform:scaleY(.03); } }
+            @keyframes ovolya-eye-lids { 0%,12%,18%,100% { opacity:0; } 14%,16% { opacity:1; } }
+            @keyframes ovolya-eye-look { 0%,12%,88%,100% { transform:translateX(0); } 28%,40% { transform:translateX(-2px); } 64%,76% { transform:translateX(2px); } }
+            @media (prefers-reduced-motion:reduce) { #ovolya-monitor-debug-container *, #ovolya-monitor-debug-container *::before, #ovolya-monitor-debug-container *::after { animation:none !important; transition:none !important; } }
+        `;
+        document.head.appendChild(style);
         monitorDebugDiv = document.createElement('div');
         monitorDebugDiv.id = 'ovolya-monitor-debug-container';
-        monitorDebugDiv.style.cssText = `position: fixed; bottom: 1.2px; left: 1.2px; display: flex; flex-direction: column; z-index: 9998; user-select: none; font-family: sans-serif; font-size: 13px; align-items: flex-start;`;
 
         const panel = document.createElement('div');
         panel.id = 'ovolya-settings-panel';
-        panel.style.cssText = `display: none; background: #1a1a1a; border: 1px solid #444; width: 420px; max-height: 60vh; overflow-y: auto; padding: 15px; margin-bottom: 5px; color: #ccc; box-shadow: 0 -4px 15px rgba(0,0,0,0.5);`;
-
-        const modeBtn = document.createElement('div');
-        modeBtn.id = 'ovolya-mode-btn';
-        modeBtn.style.cssText = `display: none; background: #222; color: #fff; padding: 5px 12px; border: 1px solid #444; cursor: pointer; width: max-content; margin-bottom: 5px;`;
-        modeBtn.onclick = () => { isNightMode = !isNightMode; localStorage.setItem('sd_night_mode', isNightMode); monitorUpdateDebug(); };
+        panel.setAttribute('role', 'region');
+        panel.setAttribute('aria-label', t('monitorSettings'));
 
         const bottomRow = document.createElement('div');
-        bottomRow.style.cssText = `display: flex; gap: 5px; align-items: stretch;`;
-
-        const timerBtn = document.createElement('div');
+        bottomRow.className = 'ovolya-monitor-dock';
+        const timerBtn = document.createElement('button');
         timerBtn.id = 'ovolya-monitor-timer-btn';
-        timerBtn.style.cssText = `background: #222; color: #0f0; padding: 5px 12px; font-family: monospace; cursor: pointer; border: 1px solid #444; display: flex; align-items: center; justify-content: center; min-height: 28px; box-sizing: border-box;`;
-        timerBtn.title = 'Настройки таймера и фильтров';
+        timerBtn.type = 'button';
+        timerBtn.innerHTML = `<svg class="ovolya-timer-eyes" viewBox="0 0 36 24" fill="none" aria-hidden="true">
+            <g class="ovolya-eye-open"><ellipse cx="9" cy="12" rx="6" ry="7" fill="currentColor"/><ellipse class="ovolya-eye-pupil" cx="9" cy="12" rx="2.5" ry="3.5" fill="#19232a"/></g>
+            <g class="ovolya-eye-open"><ellipse cx="27" cy="12" rx="6" ry="7" fill="currentColor"/><ellipse class="ovolya-eye-pupil" cx="27" cy="12" rx="2.5" ry="3.5" fill="#19232a"/></g>
+            <g class="ovolya-eye-closed" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 11q6 6 12 0M21 11q6 6 12 0"/></g>
+            </svg><span class="ovolya-mode-overlay" aria-hidden="true"><span class="ovolya-sun-icon">${monitorMenuIcons.sun}</span><span class="ovolya-moon-icon">${monitorMenuIcons.moon}</span></span><span class="ovolya-unread-badge" hidden aria-hidden="true"></span>`;
         timerBtn.onclick = () => {
-            isMenuOpen = !isMenuOpen;
-            if (isMenuOpen) {
-                activeTab = 'rules';
-                lastRenderedTab = null;
-            } else {
-                activeTab = null;
-            }
+            isNightMode = !isNightMode;
+            localStorage.setItem('sd_night_mode', isNightMode);
+            stopCurrentAudio();
             monitorUpdateDebug();
         };
 
-        const pinBtn = document.createElement('div');
+        const navigation = document.createElement('div');
+        navigation.className = 'ovolya-monitor-navigation';
+        const pinBtn = document.createElement('button');
         pinBtn.id = 'ovolya-monitor-pin-btn';
-        pinBtn.style.cssText = `background: #222; color: #fff; padding: 0 10px; cursor: pointer; border: 1px solid #444; display: flex; align-items: center;`;
-        pinBtn.textContent = '📌';
+        pinBtn.type = 'button';
+        pinBtn.innerHTML = monitorMenuIcons.pin;
+        pinBtn.title = t('pin');
+        pinBtn.setAttribute('aria-label', pinBtn.title);
         pinBtn.onclick = () => { if (isMonitorTargetPage()) { monitorWriteLock(); monitorCheckOwnership(); } };
+        navigation.appendChild(pinBtn);
 
-        const btnRules = document.createElement('div');
-        btnRules.id = 'ovolya-menu-rules-btn';
-        btnRules.textContent = '🔕 Чёрный список';
-        btnRules.style.cssText = `display: none; color: #ccc; padding: 0 12px; cursor: pointer; border: 1px solid #444; align-items: center;`;
-        btnRules.onclick = () => { activeTab = 'rules'; lastRenderedTab = null; monitorUpdateDebug(); };
-
-        const btnSound = document.createElement('div');
-        btnSound.id = 'ovolya-menu-sound-btn';
-        btnSound.textContent = '🔊 Звук';
-        btnSound.style.cssText = `display: none; color: #ccc; padding: 0 12px; cursor: pointer; border: 1px solid #444; align-items: center;`;
-        btnSound.onclick = () => { activeTab = 'settings'; lastRenderedTab = null; monitorUpdateDebug(); };
-
-        monitorDebugDiv.append(panel, modeBtn, bottomRow);
-        bottomRow.append(timerBtn, pinBtn, btnRules, btnSound);
+        for (const [id, tab] of [['ovolya-menu-rules-btn', 'rules'], ['ovolya-menu-sound-btn', 'settings']]) {
+            const button = document.createElement('button');
+            button.id = id;
+            button.type = 'button';
+            button.innerHTML = `<span class="ovolya-nav-icon">${monitorMenuIcons[tab]}</span><span class="ovolya-nav-close">${monitorMenuIcons.close}</span>`;
+            button.setAttribute('aria-controls', panel.id);
+            button.onclick = () => monitorOpenSection(tab);
+            navigation.appendChild(button);
+        }
+        bottomRow.addEventListener('pointerenter', () => { monitorDockHovered = true; monitorDockSuppressReveal = false; monitorUpdateDockVisibility(); });
+        bottomRow.addEventListener('pointerleave', () => { monitorDockHovered = false; monitorDockSuppressReveal = false; monitorUpdateDockVisibility(); });
+        bottomRow.addEventListener('focusin', event => {
+            monitorDockFocused = event.target.matches(':focus-visible');
+            if (!monitorDebugDiv.contains(event.relatedTarget)) monitorDockSuppressReveal = false;
+            monitorUpdateDockVisibility();
+        });
+        bottomRow.addEventListener('focusout', () => queueMicrotask(() => {
+            monitorDockFocused = bottomRow.contains(document.activeElement) && document.activeElement.matches(':focus-visible');
+            if (!bottomRow.contains(document.activeElement)) monitorDockSuppressReveal = false;
+            monitorUpdateDockVisibility();
+        }));
+        monitorDebugDiv.addEventListener('keydown', event => {
+            if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); monitorCloseMenu(); }
+        });
+        bottomRow.append(timerBtn, navigation);
+        monitorDebugDiv.append(panel, bottomRow);
         document.body.appendChild(monitorDebugDiv);
     }
 
     function monitorUpdateDebug() {
-        const container = document.querySelector('#ovolya-monitor-debug-container');
+        const container = monitorDebugDiv;
         if (!container) return;
+        container.style.display = isMonitorTargetPage() || isMenuOpen ? 'flex' : 'none';
         const panel = container.querySelector('#ovolya-settings-panel');
         const timerBtn = container.querySelector('#ovolya-monitor-timer-btn');
+        const minutes = Math.floor(Math.max(0, monitorTimeLeft) / 60);
+        const seconds = Math.floor(Math.max(0, monitorTimeLeft) % 60);
+        const status = t(monitorIsOwner ? 'monitoring' : 'waiting');
+        const timerPaused = !monitorIsOwner || monitorIsPaused;
+        const timerText = t('timerStatus', `${minutes}:${String(seconds).padStart(2, '0')}`, status, t(timerPaused ? 'paused' : 'countdown'));
+        timerBtn.title = `${timerText}${monitorNotificationCount > 0 ? ` | ${t('newCount', monitorNotificationCount)}` : ''}
+${t(isNightMode ? 'nightMode' : 'dayMode')}
+${t('debugTooltip')}`;
+        timerBtn.setAttribute('aria-label', timerBtn.title);
+        timerBtn.setAttribute('aria-pressed', String(isNightMode));
+        timerBtn.dataset.night = String(isNightMode);
+        panel.setAttribute('aria-label', t('monitorSettings'));
+        panel.lang = currentLang;
+        timerBtn.dataset.paused = String(timerPaused);
+        timerBtn.dataset.unread = String(monitorNotificationCount > 0);
+        const badge = timerBtn.querySelector('.ovolya-unread-badge');
+        badge.hidden = monitorNotificationCount === 0;
+        const badgeText = monitorNotificationCount > 99 ? '99+' : String(monitorNotificationCount);
+        if (badge.textContent !== badgeText) badge.textContent = badgeText;
+        for (const [id, tab, label] of [['ovolya-menu-rules-btn', 'rules', t('filters')], ['ovolya-menu-sound-btn', 'settings', t('soundSettings')]]) {
+            const button = container.querySelector(`#${id}`);
+            const selected = isMenuOpen && activeTab === tab;
+            button.title = selected ? t('closeMenu', label) : label;
+            button.setAttribute('aria-label', button.title);
+            button.setAttribute('aria-expanded', String(selected));
+            button.dataset.current = String(selected);
+        }
         const pinBtn = container.querySelector('#ovolya-monitor-pin-btn');
-        const modeBtn = container.querySelector('#ovolya-mode-btn');
-        const rulesBtn = container.querySelector('#ovolya-menu-rules-btn');
-        const soundBtn = container.querySelector('#ovolya-menu-sound-btn');
-
-        if (!isMonitorTargetPage() && !isMenuOpen) {
-            if (container.style.display !== 'none') container.style.display = 'none';
-            return;
-        } else {
-            if (container.style.display !== 'flex') container.style.display = 'flex';
+        pinBtn.hidden = monitorIsOwner;
+        pinBtn.title = t('pin');
+        pinBtn.setAttribute('aria-label', pinBtn.title);
+        panel.style.display = isMenuOpen ? 'block' : 'none';
+        panel.style.width = activeTab === 'rules' ? '640px' : '468px';
+        if (isMenuOpen && activeTab !== lastRenderedTab) {
+            renderPanelContent(panel);
+            lastRenderedTab = activeTab;
         }
-
-        const m = Math.floor(Math.max(0, monitorTimeLeft) / 60);
-        const s = Math.floor(Math.max(0, monitorTimeLeft) % 60);
-        let status = monitorIsOwner ? 'моніторинг' : 'очікування';
-        let timerText = `🔄 ${m}:${String(s).padStart(2, '0')} | ${status}`;
-
-        if (monitorNotificationCount > 0) timerText += ` | 🟠 нових: ${monitorNotificationCount}`;
-
-        if (isMenuOpen) {
-            timerBtn.textContent = '❌ Закрыть';
-            timerBtn.style.color = '#fff'; timerBtn.style.background = '#522'; timerBtn.style.border = '1px solid #a44';
-            modeBtn.style.display = 'block';
-            modeBtn.textContent = isNightMode ? '🌙 Ночь (AFK)' : '☀️ День (Стандарт)';
-            modeBtn.style.background = isNightMode ? '#1e3a5f' : '#222';
-            rulesBtn.style.display = 'flex'; soundBtn.style.display = 'flex';
-            rulesBtn.style.background = activeTab === 'rules' ? '#444' : '#222';
-            soundBtn.style.background = activeTab === 'settings' ? '#444' : '#222';
-            panel.style.display = activeTab ? 'block' : 'none';
-            if (activeTab && activeTab !== lastRenderedTab) {
-                renderPanelContent(panel);
-                lastRenderedTab = activeTab;
-            }
-        } else {
-            timerBtn.textContent = timerText;
-            if (monitorNotificationCount > 0) {
-                timerBtn.style.color = '#ffaa00'; timerBtn.style.border = '1px solid #ffaa00'; timerBtn.style.background = '#222';
-            } else {
-                timerBtn.style.color = '#0f0'; timerBtn.style.border = '1px solid #444'; timerBtn.style.background = '#222';
-            }
-            modeBtn.style.display = 'none'; rulesBtn.style.display = 'none'; soundBtn.style.display = 'none'; panel.style.display = 'none';
-        }
-        if (pinBtn) pinBtn.style.display = (monitorIsOwner || isMenuOpen) ? 'none' : 'flex';
+        const statusLine = panel.querySelector('.ovolya-monitor-status');
+        if (statusLine && statusLine.textContent !== timerText) statusLine.textContent = timerText;
+        monitorUpdateDockVisibility();
     }
 
     // =======================АКТИВНОСТЬ ПОЛЬЗОВАТЕЛЯ=====================================
@@ -1006,7 +1463,7 @@
     setInterval(() => {
         if (monitorNotificationCount > 0) {
             monitorTitleBlinking = !monitorTitleBlinking;
-            document.title = monitorTitleBlinking ? '🟠 НОВЫЕ ЗАЯВКИ' : monitorOriginalTitle;
+            document.title = monitorTitleBlinking ? `🟠 ${t('newTicketsTitle')}` : monitorOriginalTitle;
         }
     }, 1000);
 
@@ -1019,7 +1476,29 @@
         runAllTasks();
     });
 
-    window.addEventListener('storage', (e) => { if (e.key === MONITOR_LOCK_KEY) monitorCheckOwnership(); });
+    window.addEventListener('storage', (e) => {
+        if (e.key === MONITOR_LOCK_KEY) monitorCheckOwnership();
+        if (e.key === LANGUAGE_KEY) {
+            currentLang = Object.hasOwn(fallbackI18n, e.newValue) ? e.newValue : 'uk';
+            refreshInterfaceLanguage();
+            void loadLanguage(currentLang);
+        }
+        if (e.key === 'sd_night_mode') {
+            isNightMode = e.newValue === 'true';
+            stopCurrentAudio();
+            monitorUpdateDebug();
+        }
+        if (e.key === REQUEST_FILTERS_KEY) {
+            try {
+                const rules = JSON.parse(e.newValue || '[]');
+                if (!Array.isArray(rules)) return;
+                requestFilterRules = rules;
+                lastRenderedTab = null;
+                monitorUpdateDebug();
+                hideBlacklistedTickets();
+            } catch (error) { console.log('[sd.bitech] Could not read updated filters:', error); }
+        }
+    });
     window.addEventListener('beforeunload', () => {
         if (!monitorIsOwner || monitorReadLock()?.token !== monitorToken) return;
         // Preserve ownership and remaining time in this tab across full navigation.
@@ -1030,6 +1509,7 @@
     });
 
     initNewRequestsMonitor();
+    void loadLanguage(currentLang);
 
     const statusObserver = new MutationObserver(replaceStatusText);
     statusObserver.observe(document.body, { childList: true, subtree: true });
@@ -1055,6 +1535,7 @@
     function runAllTasks() {
         observer.disconnect();
         try {
+            if (ensureRequestsPageSize()) return;
             manageLogoutButton();
             updateRequestsMenuLink();
             if (window.location.pathname === '/admin/requests' || window.location.pathname === '/admin/requests/') {

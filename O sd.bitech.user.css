@@ -1,7 +1,7 @@
 /* ==UserStyle==
 @name           О sd.bitech.com.ua
 @namespace      github.com/openstyles/stylus
-@version        20261007.2
+@version        20261010.1
 @description    Стиль для sd.bitech.com.ua. Прибирає таймери, робить зручний для очей дизайн. Приховані зайві паразитні індикатори. В заявці змінено розташування на компактне та інформативне. Деталі на https://github.com/Ovolsan/O-sd.bitech
 @author         Ovolya
 
@@ -19,7 +19,7 @@ body {
 .card,
 .content,
 .table,
-div:not(#my-sla-timer):not(.p-drawer):not(.p-dialog):not(.p-overlaypanel):not(.p-drawer-mask):not(.p-dialog-mask):not(.p-overlay-mask) {
+div:not(#my-sla-timer):not(.p-drawer):not(.p-dialog):not(.p-overlaypanel):not(.p-drawer-mask):not(.p-dialog-mask):not(.p-overlay-mask):not(:where(#ovolya-monitor-debug-container, #ovolya-monitor-debug-container *)) {
     background-color: #26282f !important;
 }
 /*непонятная рамка вокруг окна таблицы*/
@@ -30,12 +30,9 @@ div:not(#my-sla-timer):not(.p-drawer):not(.p-dialog):not(.p-overlaypanel):not(.p
     background: transparent !important;
 }
 
-/* текст */
+/* Тема страницы не перекрашивает собственное меню скрипта. */
 body,
-span,
-td,
-th,
-label {
+:is(span, td, th, label):not(:where(#ovolya-monitor-debug-container, #ovolya-monitor-debug-container *)) {
     color: #cfd3da !important;
 }
     
@@ -76,18 +73,18 @@ app-badge-link .p-badge {
 }
 
      /* таблицы */
-table {
+table:not(:where(#ovolya-monitor-debug-container, #ovolya-monitor-debug-container *)) {
     border-collapse: separate !important;
     border-spacing: 0;
 }
 
-td, th {
+:is(td, th):not(:where(#ovolya-monitor-debug-container, #ovolya-monitor-debug-container *)) {
     padding: 10px 14px !important;
     border-bottom: 1px solid #32343b !important;
 }
 
 /* hover строки */
-tr:hover td {
+tr:hover td:not(:where(#ovolya-monitor-debug-container, #ovolya-monitor-debug-container *)) {
     background: #26282f !important;
 }
 
