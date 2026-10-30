@@ -1,9 +1,9 @@
 /* ==UserStyle==
 @name           О sd.bitech.com.ua
 @namespace      github.com/openstyles/stylus
-@version        20261010.1
+@version        20261030.4
 @description    Стиль для sd.bitech.com.ua. Прибирає таймери, робить зручний для очей дизайн. Приховані зайві паразитні індикатори. В заявці змінено розташування на компактне та інформативне. Деталі на https://github.com/Ovolsan/O-sd.bitech
-@author         Ovolya
+@author         Ovolsan
 
 @preprocessor   less
 @var checkbox show-breadcrumbs "Показувати верхню панель (хлібні крихти та зворотний зв'язок)" 0
@@ -19,7 +19,7 @@ body {
 .card,
 .content,
 .table,
-div:not(#my-sla-timer):not(.p-drawer):not(.p-dialog):not(.p-overlaypanel):not(.p-drawer-mask):not(.p-dialog-mask):not(.p-overlay-mask):not(:where(#ovolya-monitor-debug-container, #ovolya-monitor-debug-container *)) {
+div:not(#my-sla-timer):not(.p-drawer):not(.p-dialog):not(.p-overlaypanel):not(.p-drawer-mask):not(.p-dialog-mask):not(.p-overlay-mask):not(:where(#ovolya-monitor-debug-container, #ovolya-monitor-debug-container *, .ovolya-rf-empty *, .p-multiselect-option *, .p-select-option *)) {
     background-color: #26282f !important;
 }
 /*непонятная рамка вокруг окна таблицы*/
@@ -411,6 +411,7 @@ app-statistics-page .p-datatable .p-datatable-thead > tr > th {
       pointer-events: auto !important;
       user-select: text !important;
       opacity: 1 !important; /* disabled делает элемент полупрозрачным */
+      font-size: 14px !important; /* на 2px крупнее остальных полей */
 }
 
 
@@ -528,5 +529,93 @@ a[href*="/admin/requests/"],
 a[href*="/admin/requests/"]:hover {
     text-decoration: none !important;
 }
+
+/* ========== БЕЗ ЗАОКРУГЛЕНЬ ========== */
+*,
+*::before,
+*::after {
+    border-radius: 0 !important;
+}
+
+/* ========== СТОРІНКА ЗАЯВКИ В СТИЛІ HTML NOTE (фони не змінюються) ========== */
+/* Незаповнені поля трохи темніші за стоковий #26282f (клас ставить скрипт). */
+.ovolya-rf-empty,
+.ovolya-rf-empty :is(div, fieldset, .p-component, .p-inputtext, .p-textarea) {
+    background-color: #202228 !important;
+}
+.ovolya-rf-empty {
+    box-shadow: 0 0 0 3px #202228 !important;
+}
+/* Назви полів — приглушені, як підписи полів у HTML Note. */
+.rf-grid .control-label-text,
+.rf-grid .control-label-text label {
+    color: #9a9ba3 !important;
+    font-family: 'Segoe UI', Arial, sans-serif !important;
+}
+/* Рамки полів і акцентний фокус. */
+.rf-grid :is(input.p-inputtext, textarea.p-textarea, .p-select, .p-multiselect, .p-datepicker-input) {
+    border-color: #3a3c42 !important;
+    box-shadow: none !important;
+}
+.rf-grid :is(input.p-inputtext, textarea.p-textarea):focus,
+.rf-grid :is(.p-select, .p-multiselect).p-focus {
+    outline: 2px solid #5aa9ff !important;
+    outline-offset: 0 !important;
+    border-color: transparent !important;
+}
+/* Варіанти без позначок і рамок: вибраний виділяється фоном #141635, між варіантами — проміжок 2px.
+   Відмітка ховається візуально, а не display:none — клавіатура й клік по назві працюють як раніше. */
+:is(.radio-button-label, .checkbox-label) {
+    display: inline-flex !important;
+    align-items: center !important;
+    position: relative;
+    margin: 0 2px 2px 0 !important;
+    border: 0 !important;
+    outline: 0 !important;
+    box-shadow: none !important;
+}
+:is(.radio-button-label, .checkbox-label) > :is(p-radiobutton, p-checkbox) {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    overflow: hidden !important;
+    clip-path: inset(50%) !important;
+    opacity: 0 !important;
+}
+:is(.radio-button-label, .checkbox-label):has([data-p-checked="true"]) {
+    background: #2b3b52 !important;
+}
+/* Вибір з клавіатури — ледь помітний пунктир, щоб було видно, де фокус. */
+:is(.radio-button-label, .checkbox-label):has(input:focus-visible) {
+    outline: 1px dashed #9a9ba3 !important;
+    outline-offset: -1px;
+}
+/* Випадаючі списки: без прапорців і рамок, вибраний пункт — той самий фон #141635.
+   Смуга 2px кольору панелі внизу пункту не дає сусіднім вибраним злитися; висоту пунктів вона не змінює. */
+:is(.p-multiselect-option, .p-select-option) > p-checkbox,
+:is(.p-select-option-check-icon, .p-select-option-blank-icon) {
+    display: none !important;
+}
+:is(.p-multiselect-option, .p-select-option) {
+    background: transparent !important;
+    color: #cfd3da !important;
+    border: 0 !important;
+    outline: 0 !important;
+    box-shadow: inset 0 -2px 0 #26282f !important;
+}
+:is(.p-multiselect-option, .p-select-option):is([data-p-focused="true"], :hover) {
+    background: #2a2c31 !important;
+}
+:is(.p-multiselect-option, .p-select-option)[data-p-selected="true"] {
+    background: #141635 !important;
+    font-weight: 600;
+}
+.app-action-buttons .p-button:hover {
+    color: #cfe4ff !important;
+}
+/* Квадратні смуги прокрутки. */
+::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar-thumb { background: #34363c; border: 3px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-track { background: transparent; }
 
 }
