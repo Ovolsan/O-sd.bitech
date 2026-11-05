@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         О sd.bitech
 // @namespace    http://tampermonkey.net/
-// @version      20261030.6
+// @version      20261105.4
 // @description  Кнопка виходу біля користувача в профілі. Компактні списки заявок. Ярлики. Моніторинг нових заявок + Звук и Фильтры + Системные уведомления. Налаштування блоків заявки (ПКМ на «Зберегти»)
 // @author       Ovolsan
 // @match        *://sd.bitech.com.ua/*
@@ -317,6 +317,33 @@
     let requestLayoutDragCancel = null;
     let requestLayoutRefreshTimer = null;
 
+    // «Зберегти» массовой формы остаётся в её окне: левое меню относится к странице заявки.
+    function isRequestPageForm(element) { return !element.closest('app-mass-update-requests-page'); }
+
+    // Очередь в массовой форме подставляет отдел, но его поле остаётся заблокированным и не сохраняется:
+    // заявка остаётся без нового отдела и выпадает из «Статистики». Поэтому отдел открывается вместе с очередью.
+    // Закрытый вручную отдел не открывается снова, пока очередь не будет отменена и открыта заново.
+    function isMassFieldUnlocked(field) { return Boolean(field?.querySelector('input:not(:disabled)')); }
+
+    function syncMassDepartment() {
+        if (requestLayoutEditing) return;
+        document.querySelectorAll('app-mass-update-requests-page app-requests-form').forEach(form => {
+            const queue = form.querySelector('[key="queue"]');
+            const department = form.querySelector('[key="department"]');
+            const lockButton = department?.querySelector('app-lock-label-annotation button');
+            if (!queue || !lockButton) return;
+            if (!isMassFieldUnlocked(queue)) {
+                if (form.dataset.ovolyaDepartmentAuto && isMassFieldUnlocked(department)) lockButton.click();
+                delete form.dataset.ovolyaDepartmentAuto;
+                return;
+            }
+            if (form.dataset.ovolyaDepartmentAuto || isMassFieldUnlocked(department)) return;
+            if (!department.querySelector('[data-p-checked="true"]')) return;
+            form.dataset.ovolyaDepartmentAuto = 'true';
+            lockButton.click();
+        });
+    }
+
     function readRequestLayout() {
         try {
             const layout = JSON.parse(localStorage.getItem(REQUEST_LAYOUT_KEY) || 'null');
@@ -326,14 +353,15 @@
                     hiddenLabels: Array.isArray(layout.hiddenLabels) ? layout.hiddenLabels : [],
                     hiddenFields: Array.isArray(layout.hiddenFields) ? layout.hiddenFields : [],
                     fieldHeights: layout.fieldHeights && typeof layout.fieldHeights === 'object' ? layout.fieldHeights : {},
-                    hiddenOptions: layout.hiddenOptions && typeof layout.hiddenOptions === 'object' ? layout.hiddenOptions : {}
+                    hiddenOptions: layout.hiddenOptions && typeof layout.hiddenOptions === 'object' ? layout.hiddenOptions : {},
+                    columnWidths: layout.columnWidths && typeof layout.columnWidths === 'object' ? layout.columnWidths : {}
                 };
             }
         } catch (e) { console.warn('[sd.bitech] Повреждена настройка блоков заявки:', e); }
         return createEmptyRequestLayout();
     }
 
-    function createEmptyRequestLayout() { return { blocks: [], hiddenLabels: [], hiddenFields: [], fieldHeights: {}, hiddenOptions: {} }; }
+    function createEmptyRequestLayout() { return { blocks: [], hiddenLabels: [], hiddenFields: [], fieldHeights: {}, hiddenOptions: {}, columnWidths: {} }; }
 
     function saveRequestLayout() { localStorage.setItem(REQUEST_LAYOUT_KEY, JSON.stringify(requestLayout)); }
 
@@ -602,6 +630,41 @@
         if (element.style[property] !== value) element.style[property] = value;
     }
 
+    // Ширина колонок хранится долями отдельно для каждого числа колонок: { "3": [1.2, 0.9, 0.9] }.
+    function applyRequestColumnWidths(grid, cols) {
+        const widths = requestLayout.columnWidths[cols];
+        const valid = Array.isArray(widths) && widths.length === cols && widths.every(width => Number.isFinite(width) && width > 0);
+        setRequestStyle(grid, 'gridTemplateColumns', valid ? widths.map(width => `minmax(0px, ${width}fr)`).join(' ') : '');
+    }
+
+    // Линии между колонками в режиме настройки лежат поверх сетки и не участвуют в её раскладке.
+    function updateRequestColumnHandles(grid, cols) {
+        const handles = [...grid.querySelectorAll(':scope > .ovolya-rf-column-handle')];
+        const { columns } = requestLayoutEditing && cols > 1 ? measureRequestGrid(grid) : { columns: [] };
+        if (columns.length < cols || cols < 2) {
+            handles.forEach(handle => handle.remove());
+            return;
+        }
+        const origin = grid.getBoundingClientRect().left + grid.clientLeft;
+        for (let index = 0; index < cols - 1; index++) {
+            let handle = handles[index];
+            if (!handle) {
+                handle = document.createElement('i');
+                handle.className = 'ovolya-rf-ui ovolya-rf-column-handle';
+                handle.dataset.index = String(index);
+                handle.title = t('layoutColumnWidth');
+                handle.addEventListener('pointerdown', startRequestColumnDrag);
+                handle.addEventListener('dblclick', () => {
+                    delete requestLayout.columnWidths[cols];
+                    commitRequestLayout();
+                });
+                grid.append(handle);
+            }
+            setRequestStyle(handle, 'left', `${(columns[index].end + columns[index + 1].start) / 2 - origin}px`);
+        }
+        handles.slice(cols - 1).forEach(handle => handle.remove());
+    }
+
     const REQUEST_STACK_GAP = 4;
     const REQUEST_STACK_GAP_EDIT = 14;
     const requestObservedCells = new WeakSet();
@@ -627,6 +690,8 @@
 
     function applyRequestLayout(grid) {
         const cols = getGridColumnCount(grid);
+        applyRequestColumnWidths(grid, cols);
+        updateRequestColumnHandles(grid, cols);
         const stacked = hasRequestPlaces(cols);
         const hasBlocks = requestLayout.blocks.length > 0;
         const items = getRequestItems(grid, cols);
@@ -962,6 +1027,58 @@
         enhanceRequestForm();
     }
 
+    // Линия между колонками перераспределяет ширину только между двумя соседними колонками.
+    const REQUEST_COLUMN_MIN_WIDTH = 120;
+
+    function startRequestColumnDrag(event) {
+        if (event.button !== 0) return;
+        const handle = event.currentTarget;
+        const grid = handle.parentElement;
+        const index = Number(handle.dataset.index);
+        const cols = getGridColumnCount(grid);
+        const sizes = measureRequestGrid(grid).columns.slice(0, cols).map(track => track.end - track.start);
+        const total = sizes.reduce((sum, size) => sum + size, 0);
+        const pair = sizes[index] + sizes[index + 1];
+        const minimum = Math.min(REQUEST_COLUMN_MIN_WIDTH, pair / 2);
+        const saved = requestLayout.columnWidths[cols];
+        event.preventDefault();
+        handle.setPointerCapture(event.pointerId);
+        document.documentElement.classList.add('ovolya-rf-column-dragging');
+        const ghost = document.createElement('p');
+        ghost.className = 'ovolya-rf-ui ovolya-rf-ghost';
+        const move = moveEvent => {
+            const left = Math.min(Math.max(sizes[index] + moveEvent.clientX - event.clientX, minimum), pair - minimum);
+            const next = sizes.map((size, column) => column === index ? left : column === index + 1 ? pair - left : size);
+            requestLayout.columnWidths[cols] = next.map(size => Math.round(size / total * cols * 1000) / 1000);
+            applyRequestColumnWidths(grid, cols);
+            updateRequestColumnHandles(grid, cols);
+            if (!ghost.isConnected) document.body.append(ghost);
+            ghost.textContent = next.map(size => `${Math.round(size / total * 100)}%`).join(' · ');
+            ghost.style.left = `${moveEvent.clientX + 12}px`;
+            ghost.style.top = `${moveEvent.clientY + 12}px`;
+        };
+        const finish = finishEvent => {
+            handle.removeEventListener('pointermove', move);
+            handle.removeEventListener('pointerup', finish);
+            handle.removeEventListener('pointercancel', finish);
+            requestLayoutDragCancel = null;
+            ghost.remove();
+            document.documentElement.classList.remove('ovolya-rf-column-dragging');
+            if (finishEvent?.type !== 'pointerup') {
+                if (saved) requestLayout.columnWidths[cols] = saved;
+                else delete requestLayout.columnWidths[cols];
+            }
+            commitRequestLayout();
+        };
+        requestLayoutDragCancel = () => {
+            if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+            finish(null);
+        };
+        handle.addEventListener('pointermove', move);
+        handle.addEventListener('pointerup', finish);
+        handle.addEventListener('pointercancel', finish);
+    }
+
     // ⠿ переносит блок в колонку под курсором и на место между соседями (синяя линия);
     // правый край меняет ширину в колонках, нижний — минимальную высоту.
     function startRequestBlockDrag(event) {
@@ -1093,8 +1210,12 @@
         style.textContent = `
             html:not(.ovolya-rf-edit) .rf-grid > .ovolya-rf-block-hidden { display:none !important; }
             .rf-grid .ovolya-rf-label-hidden .control-label-text { display:none !important; }
+            /* Поле массовой формы открывается ссылкой [редагувати] внутри названия: скрывается только текст. */
+            app-mass-update-requests-page .rf-grid .ovolya-rf-label-hidden .control-label-text { display:block !important; font-size:0 !important; }
+            app-mass-update-requests-page .rf-grid .ovolya-rf-label-hidden app-label-annotations { font-size:12px; }
             html:not(.ovolya-rf-edit) .ovolya-rf-option-hidden:not(:has([data-p-checked="true"])) { display:none !important; }
             [key][label].ovolya-rf-empty { display:block; background-color:#202228; box-shadow:0 0 0 3px #202228; }
+            html.ovolya-rf-edit .rf-grid { position:relative; }
             html.ovolya-rf-edit .rf-grid > .rf-cell { position:relative; min-height:34px; outline:1px dashed #5aa9ff88; outline-offset:2px; }
             html.ovolya-rf-edit .rf-grid > .rf-cell > :not(.ovolya-rf-ui) { pointer-events:none; }
             html.ovolya-rf-edit .rf-grid :is(.radio-button-label, .checkbox-label, .control-label-text) { pointer-events:auto; cursor:pointer; }
@@ -1149,6 +1270,9 @@
             .ovolya-save-tip { position:fixed; z-index:100001; margin:0; padding:4px 8px; pointer-events:none; background:#26282d; color:#e6e6e9; border:1px solid #3a3c42; box-shadow:0 6px 18px #000a; font:12px 'Segoe UI', Arial, sans-serif; white-space:nowrap; }
             .ovolya-rf-drop { position:fixed; z-index:100000; display:block; pointer-events:none; background:#5aa9ff; }
             .ovolya-rf-slot { position:fixed; z-index:100000; display:block; pointer-events:none; background:#5aa9ff26; outline:1px solid #5aa9ff; }
+            .ovolya-rf-column-handle { position:absolute; top:0; bottom:0; z-index:2; display:block; width:7px; margin-left:-3.5px; cursor:col-resize; touch-action:none; background:linear-gradient(#5aa9ff88, #5aa9ff88) center / 1px 100% no-repeat; }
+            .ovolya-rf-column-handle:hover { background-size:3px 100%; }
+            html.ovolya-rf-column-dragging, html.ovolya-rf-column-dragging * { cursor:col-resize !important; user-select:none !important; }
             .ovolya-rf-handle { position:absolute; z-index:3; display:block; opacity:0; touch-action:none; transition:opacity .1s; }
             .ovolya-rf-handle[data-edge="r"] { top:0; right:-7px; width:8px; height:100%; cursor:ew-resize; }
             .ovolya-rf-handle[data-edge="b"] { left:0; bottom:-7px; width:100%; height:8px; cursor:ns-resize; }
@@ -1163,7 +1287,9 @@
     // Ярлык нажимает настоящую кнопку формы: та остаётся в DOM скрытой, Angular отправляет форму как обычно.
     let requestSaveTip = null;
 
-    function getRequestSaveButton() { return document.querySelector('app-requests-form .app-action-buttons button[type="submit"]'); }
+    function getRequestSaveButton() {
+        return [...document.querySelectorAll('app-requests-form .app-action-buttons button[type="submit"]')].find(isRequestPageForm);
+    }
 
     function hideRequestSaveTip() {
         requestSaveTip?.remove();
@@ -1220,7 +1346,7 @@
     }
 
     function enhanceRequestForm() {
-        const grids = document.querySelectorAll('app-requests-form .rf-grid');
+        const grids = [...document.querySelectorAll('app-requests-form .rf-grid')];
         if (grids.length) ensureRequestLayoutStyle();
         manageRequestSaveTab();
         if (!grids.length) {
@@ -1378,9 +1504,9 @@
             "layoutEdit": "Налаштувати блоки заявки",
             "layoutDone": "Завершити налаштування блоків",
             "layoutReset": "Скинути налаштування блоків",
-            "layoutResetConfirm": "Скинути порядок блоків, приховані блоки, назви та варіанти?",
+            "layoutResetConfirm": "Скинути порядок блоків, ширину колонок, приховані блоки, назви та варіанти?",
             "layoutTitle": "Налаштування блоків",
-            "layoutHint": "Перетягніть блок за ⠿ у потрібну колонку: синя лінія показує, між якими блоками він стане. Блоки в колонці йдуть щільно один за одним і самі піднімаються, коли блок вище прихований або його немає в заявці. Правий край — ширина в колонках, нижній — мінімальна висота. Висоту текстового поля (наприклад, «Опис статусу») задайте його правим нижнім кутом — вона запам'ятається як мінімальна. Кнопка 📌 закріплює ряд: блок і сусіди праворуч стоять на одній лінії й не з'їжджають. Кнопка ☰ ховає окреме поле чи його назву, якщо в блоці їх кілька. Клік по назві ховає її одразу, як після збереження (повернути — «Aa»), клік по варіанту ховає або повертає його; прихована назва з'являється в підказці при наведенні. Esc — завершити.",
+            "layoutHint": "Перетягніть блок за ⠿ у потрібну колонку: синя лінія показує, між якими блоками він стане. Блоки в колонці йдуть щільно один за одним і самі піднімаються, коли блок вище прихований або його немає в заявці. Правий край — ширина в колонках, нижній — мінімальна висота. Лінія між колонками змінює їхню ширину, подвійний клік по ній вирівнює колонки. Висоту текстового поля (наприклад, «Опис статусу») задайте його правим нижнім кутом — вона запам'ятається як мінімальна. Кнопка 📌 закріплює ряд: блок і сусіди праворуч стоять на одній лінії й не з'їжджають. Кнопка ☰ ховає окреме поле чи його назву, якщо в блоці їх кілька. Клік по назві ховає її одразу, як після збереження (повернути — «Aa»), клік по варіанту ховає або повертає його; прихована назва з'являється в підказці при наведенні. Esc — завершити.",
             "layoutMoveLeft": "У колонку ліворуч",
             "layoutMoveRight": "У колонку праворуч",
             "layoutMoveUp": "Вище в колонці",
@@ -1389,6 +1515,7 @@
             "layoutResizeHeight": "Тягніть, щоб змінити мінімальну висоту",
             "layoutResize": "Тягніть, щоб змінити ширину й мінімальну висоту",
             "layoutResetShort": "Скинути",
+            "layoutColumnWidth": "Ширина колонки: перетягніть лінію. Подвійний клік вирівнює колонки.",
             "layoutDoneShort": "Готово",
             "layoutDrag": "Перетягнути блок",
             "layoutHideBlock": "Сховати блок",
@@ -1462,9 +1589,9 @@
             "layoutEdit": "Настроить блоки заявки",
             "layoutDone": "Завершить настройку блоков",
             "layoutReset": "Сбросить настройку блоков",
-            "layoutResetConfirm": "Сбросить порядок блоков, скрытые блоки, названия и варианты?",
+            "layoutResetConfirm": "Сбросить порядок блоков, ширину колонок, скрытые блоки, названия и варианты?",
             "layoutTitle": "Настройка блоков",
-            "layoutHint": "Перетащите блок за ⠿ в нужную колонку: синяя линия показывает, между какими блоками он встанет. Блоки в колонке идут плотно друг за другом и сами поднимаются, когда блок выше скрыт или его нет в заявке. Правый край — ширина в колонках, нижний — минимальная высота. Высоту текстового поля (например, «Опис статусу») задайте его правым нижним углом — она запомнится как минимальная. Кнопка 📌 закрепляет ряд: блок и соседи справа стоят на одной линии и не съезжают. Кнопка ☰ скрывает отдельное поле или его название, если в блоке их несколько. Клик по названию скрывает его сразу, как после сохранения (вернуть — «Aa»), клик по варианту скрывает или возвращает его; скрытое название видно в подсказке при наведении. Esc — завершить.",
+            "layoutHint": "Перетащите блок за ⠿ в нужную колонку: синяя линия показывает, между какими блоками он встанет. Блоки в колонке идут плотно друг за другом и сами поднимаются, когда блок выше скрыт или его нет в заявке. Правый край — ширина в колонках, нижний — минимальная высота. Линия между колонками меняет их ширину, двойной клик по ней выравнивает колонки. Высоту текстового поля (например, «Опис статусу») задайте его правым нижним углом — она запомнится как минимальная. Кнопка 📌 закрепляет ряд: блок и соседи справа стоят на одной линии и не съезжают. Кнопка ☰ скрывает отдельное поле или его название, если в блоке их несколько. Клик по названию скрывает его сразу, как после сохранения (вернуть — «Aa»), клик по варианту скрывает или возвращает его; скрытое название видно в подсказке при наведении. Esc — завершить.",
             "layoutMoveLeft": "В колонку слева",
             "layoutMoveRight": "В колонку справа",
             "layoutMoveUp": "Выше в колонке",
@@ -1473,6 +1600,7 @@
             "layoutResizeHeight": "Тяните, чтобы изменить минимальную высоту",
             "layoutResize": "Тяните, чтобы изменить ширину и минимальную высоту",
             "layoutResetShort": "Сбросить",
+            "layoutColumnWidth": "Ширина колонки: перетащите линию. Двойной клик выравнивает колонки.",
             "layoutDoneShort": "Готово",
             "layoutDrag": "Перетащить блок",
             "layoutHideBlock": "Скрыть блок",
@@ -2586,6 +2714,7 @@ ${t('debugTooltip')}`;
             manageLogoutButton();
             updateRequestsMenuLink();
             enhanceRequestForm();
+            syncMassDepartment();
             if (window.location.pathname === '/admin/requests' || window.location.pathname === '/admin/requests/') {
                 relocateControlsAndQueues();
                 enhanceListPage();
@@ -2600,5 +2729,9 @@ ${t('debugTooltip')}`;
 
     const observer = new MutationObserver(() => { runAllTasks(); });
     observer.observe(document.body, { childList: true, subtree: true });
+    // Разблокировка поля меняет только атрибуты и текст, поэтому общий наблюдатель её не видит.
+    document.addEventListener('click', event => {
+        if (event.target.closest?.('app-mass-update-requests-page')) setTimeout(syncMassDepartment, 50);
+    });
     runAllTasks();
 })();

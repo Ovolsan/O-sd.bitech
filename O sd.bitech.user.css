@@ -1,7 +1,7 @@
 /* ==UserStyle==
 @name           О sd.bitech.com.ua
 @namespace      github.com/openstyles/stylus
-@version        20261030.4
+@version        20261105.2
 @description    Стиль для sd.bitech.com.ua. Прибирає таймери, робить зручний для очей дизайн. Приховані зайві паразитні індикатори. В заявці змінено розташування на компактне та інформативне. Деталі на https://github.com/Ovolsan/O-sd.bitech
 @author         Ovolsan
 
@@ -390,6 +390,16 @@ app-iframe iframe {
      white-space: nowrap !important;
      overflow: hidden;
 }
+/* Панель пагінації лежить у комірці таблиці: без цього комірка обрізає список кількості заявок. */
+.p-datatable :is(td, th):has(.list-toolbar) {
+     overflow: visible !important;
+}
+/* Текст у рядках не переноситься, тому довга назва розтягувала таблицю й давала горизонтальну прокрутку.
+   Фіксована розкладка тримає таблицю по ширині контейнера, а назву обрізає три крапки. */
+:is(app-requests-list, app-requests-list-legacy) .p-datatable-table-container > table {
+     table-layout: fixed !important;
+     width: 100% !important;
+}
 /* Статистика: сохранить оба уровня заголовков и объединённые ячейки.
    Эти правила также перекрывают скрытие первой строки из старой версии стиля. */
 app-statistics-page .p-datatable .p-datatable-thead {
@@ -522,6 +532,15 @@ app-statistics-page .p-datatable .p-datatable-thead > tr > th {
 .p-dialog,
 .p-overlaypanel {
     z-index: 2000 !important;
+}
+
+/* Вікно масового редагування — на все вікно сторінки. */
+.p-dialog:has(app-mass-update-requests-page) {
+    width: 100% !important;
+    max-width: none !important;
+    height: 100% !important;
+    max-height: none !important;
+    margin: 0 !important;
 }
 
 /* Убрать подчеркивание у гиперссылок на заявки */
