@@ -1,13 +1,26 @@
 /* ==UserStyle==
 @name           О sd.bitech.com.ua
 @namespace      github.com/openstyles/stylus
-@version        20261105.2
+@version        20261112.1
 @description    Стиль для sd.bitech.com.ua. Прибирає таймери, робить зручний для очей дизайн. Приховані зайві паразитні індикатори. В заявці змінено розташування на компактне та інформативне. Деталі на https://github.com/Ovolsan/O-sd.bitech
 @author         Ovolsan
 
 @preprocessor   less
 @var checkbox show-breadcrumbs "Показувати верхню панель (хлібні крихти та зворотний зв'язок)" 0
+@var checkbox list-site-status-colors "Оригінальні кольори статусів у списку заявок" 0
 ==/UserStyle== */
+
+/* Перемикач «Оригінальні кольори статусів у списку заявок»: у списку заявок бейдж статусу
+   й усе всередині нього виключаються з правил, що перефарбовують фон і текст.
+   Добавка :not(:where(...)) не змінює специфічність правил, до яких її дописано. */
+.ovolya-status-colors() when (@list-site-status-colors = 1) {
+    @keep-list-status-colors: ~":not(:where(:is(app-requests-list, app-requests-list-legacy) :is(.status-badge, .status-badge *)))";
+}
+.ovolya-status-colors() when not (@list-site-status-colors = 1) {
+    @keep-list-status-colors: ~"";
+}
+.ovolya-status-colors();
+
 @-moz-document domain("sd.bitech.com.ua") {
 body {
     background: #1e1f24 !important;
@@ -15,11 +28,11 @@ body {
 }
 
 /* панели */
-.p-component,
+.p-component@{keep-list-status-colors},
 .card,
 .content,
 .table,
-div:not(#my-sla-timer):not(.p-drawer):not(.p-dialog):not(.p-overlaypanel):not(.p-drawer-mask):not(.p-dialog-mask):not(.p-overlay-mask):not(:where(#ovolya-monitor-debug-container, #ovolya-monitor-debug-container *, .ovolya-rf-empty *, .p-multiselect-option *, .p-select-option *)) {
+div:not(#my-sla-timer):not(.p-drawer):not(.p-dialog):not(.p-overlaypanel):not(.p-drawer-mask):not(.p-dialog-mask):not(.p-overlay-mask):not(:where(#ovolya-monitor-debug-container, #ovolya-monitor-debug-container *, .ovolya-rf-empty *, .p-multiselect-option *, .p-select-option *))@{keep-list-status-colors} {
     background-color: #26282f !important;
 }
 /*непонятная рамка вокруг окна таблицы*/
@@ -32,7 +45,7 @@ div:not(#my-sla-timer):not(.p-drawer):not(.p-dialog):not(.p-overlaypanel):not(.p
 
 /* Тема страницы не перекрашивает собственное меню скрипта. */
 body,
-:is(span, td, th, label):not(:where(#ovolya-monitor-debug-container, #ovolya-monitor-debug-container *)) {
+:is(span, td, th, label):not(:where(#ovolya-monitor-debug-container, #ovolya-monitor-debug-container *))@{keep-list-status-colors} {
     color: #cfd3da !important;
 }
     
@@ -57,7 +70,7 @@ body,
      width: 100%;
 }
      /* количество заявок */
-.p-badge {
+.p-badge@{keep-list-status-colors} {
     color: #cfd3da !important;
 }
      
@@ -90,17 +103,19 @@ tr:hover td:not(:where(#ovolya-monitor-debug-container, #ovolya-monitor-debug-co
 
 /* статусы */
 .status-badge {
-    background: #3a3d45 !important;
-    color: #cfd3da !important;
     border-radius: 0px !important;
     padding: 4px 10px !important;
     font-size: 12px !important;
     font-weight: 500;
-    
 }
-     
+/* Кольори статусів; у списку заявок перемикач у налаштуваннях стилю залишає кольори сайту. */
+.status-badge@{keep-list-status-colors} {
+    background: #3a3d45 !important;
+    color: #cfd3da !important;
+}
+
 /* статус "Нова" */
-.status-badge[style*="255, 51, 0"]{
+.status-badge[style*="255, 51, 0"]@{keep-list-status-colors} {
     background:#34394d !important;
     color:#ffd9a3 !important;
 }
