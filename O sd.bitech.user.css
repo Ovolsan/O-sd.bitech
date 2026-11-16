@@ -1,7 +1,7 @@
 /* ==UserStyle==
 @name           О sd.bitech.com.ua
 @namespace      github.com/openstyles/stylus
-@version        20261112.1
+@version        20261115.4
 @description    Стиль для sd.bitech.com.ua. Прибирає таймери, робить зручний для очей дизайн. Приховані зайві паразитні індикатори. В заявці змінено розташування на компактне та інформативне. Деталі на https://github.com/Ovolsan/O-sd.bitech
 @author         Ovolsan
 
@@ -39,6 +39,17 @@ div:not(#my-sla-timer):not(.p-drawer):not(.p-dialog):not(.p-overlaypanel):not(.p
 .dpl-main, .rf-grid {
           padding: 0rem 0rem !important;
      }
+/* Список заявок: мінімальні відступи навколо таблиці. Лівий відступ прибирає скрипт —
+   у цій смузі стоять індикатор пінгу й зелений фон позначки. */
+:is(app-requests-list, app-requests-list-legacy) > .p-3 {
+    padding: 0.4% !important;
+}
+/* Смуга під індикатор пінгу зліва від галки — кольору фону сторінки (#26282f, як .dpl-container і панелі),
+   а не чорного фону рядка сайту. Решту комірки закриває панель заявки, тож цей фон видно лише в смузі.
+   «html body» підсилює правило, щоб воно перемагало старі копії стилю, якщо їх установлено кілька. */
+html body :is(app-requests-list, app-requests-list-legacy) .p-datatable-tbody > tr > td {
+    background-color: #26282f !important;
+}
 .request-column {
     background: transparent !important;
 }

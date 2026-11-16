@@ -1,11 +1,14 @@
 // ==UserScript==
 // @name         О sd.bitech
 // @namespace    http://tampermonkey.net/
-// @version      20261105.4
-// @description  Кнопка виходу біля користувача в профілі. Компактні списки заявок. Ярлики. Моніторинг нових заявок + Звук и Фильтры + Системные уведомления. Налаштування блоків заявки (ПКМ на «Зберегти»)
+// @version      20261115.4
+// @description  Кнопка виходу біля користувача в профілі. Компактні списки заявок. Ярлики. Моніторинг нових заявок + Звук и Фильтры + Системные уведомления. Налаштування блоків заявки (ПКМ на «Зберегти»). Позначки й пінг пристроїв заявок (ПКМ у списку), пінг біля IP у «Клієнт → Мережа»
 // @author       Ovolsan
 // @match        *://sd.bitech.com.ua/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=bitech.com.ua
+// @grant        GM_xmlhttpRequest
+// @connect      127.0.0.1
+// @connect      raw.githubusercontent.com
 // @updateURL    https://github.com/Ovolsan/O-sd.bitech/raw/refs/heads/main/O%20sd.bitech.user.js
 // @downloadURL  https://github.com/Ovolsan/O-sd.bitech/raw/refs/heads/main/O%20sd.bitech.user.js
 // ==/UserScript==
@@ -1526,7 +1529,39 @@
             "layoutHideField": "Сховати поле",
             "layoutShowField": "Показати поле",
             "layoutRowStart": "Закріпити ряд: блок починає новий ряд, а блоки після нього в інших колонках стають на ту саму лінію",
-            "layoutRowStop": "Ряд закріплено — натисніть, щоб відкріпити"
+            "layoutRowStop": "Ряд закріплено — натисніть, щоб відкріпити",
+            "markSet": "Позначити як оброблену",
+            "markUnset": "Зняти позначку",
+            "markSetMany": "Позначити вибрані ({0})",
+            "markUnsetMany": "Зняти позначку з вибраних ({0})",
+            "markClearPage": "Зняти всі позначки на сторінці ({0})",
+            "markClearConfirm": "Зняти позначки з {0} заявок на цій сторінці?",
+            "pingRequest": "Пінг пристроїв заявки #{0}",
+            "pingSelected": "Пінг пристроїв вибраних заявок ({0})",
+            "pingAll": "Пінг пристроїв усіх заявок на сторінці ({0})",
+            "openInNewTab": "Відкрити в новій вкладці",
+            "listMenuHint": "Shift + права кнопка — звичайне меню браузера",
+            "pingLoading": "Завантаження пристроїв заявок…",
+            "pingAlive": "{0} мс",
+            "pingAliveFast": "<1 мс",
+            "pingDown": "недоступний",
+            "pingPending": "перевірка…",
+            "pingNoIp": "немає IP",
+            "pingNoDevices": "Пристроїв не знайдено",
+            "pingFromText": "з тексту заявки",
+            "pingFailed": "помилка",
+            "pingBadgeTitle": "Пінг: доступні {0} з {1}. Натисніть, щоб повторити.",
+            "pingIp": "Пінг {0}",
+            "pingAllIps": "Пінг усіх IP на сторінці",
+            "pingNoIpInField": "IP-адресу не знайдено",
+            "pingApiError": "Не вдалося отримати дані заявок: {0}",
+            "pingHelperMissing": "Помічник пінгу не відповідає на 127.0.0.1:{0}. Запустіть ping-helper\\sd-ping-helper.cmd (див. README).",
+            "pingHelperTitle": "Пінг пристроїв",
+            "pingHelperDesc": "Пінг виконує локальний помічник ping-helper\\sd-ping-helper.cmd на 127.0.0.1:{0}.",
+            "pingHelperCheck": "Перевірити",
+            "pingHelperOk": "Працює ✓",
+            "pingHelperDown": "Не відповідає ❌",
+            "pingHelperUnknown": "Не перевірено"
         },
         "ru": {
             "langTitle": "Мова інтерфейсу / Язык интерфейса",
@@ -1611,7 +1646,39 @@
             "layoutHideField": "Скрыть поле",
             "layoutShowField": "Показать поле",
             "layoutRowStart": "Закрепить ряд: блок начинает новый ряд, а блоки после него в других колонках встают на ту же линию",
-            "layoutRowStop": "Ряд закреплён — нажмите, чтобы открепить"
+            "layoutRowStop": "Ряд закреплён — нажмите, чтобы открепить",
+            "markSet": "Отметить как обработанную",
+            "markUnset": "Снять отметку",
+            "markSetMany": "Отметить выбранные ({0})",
+            "markUnsetMany": "Снять отметку с выбранных ({0})",
+            "markClearPage": "Снять все отметки на странице ({0})",
+            "markClearConfirm": "Снять отметки с {0} заявок на этой странице?",
+            "pingRequest": "Пинг устройств заявки #{0}",
+            "pingSelected": "Пинг устройств выбранных заявок ({0})",
+            "pingAll": "Пинг устройств всех заявок на странице ({0})",
+            "openInNewTab": "Открыть в новой вкладке",
+            "listMenuHint": "Shift + правая кнопка — обычное меню браузера",
+            "pingLoading": "Загрузка устройств заявок…",
+            "pingAlive": "{0} мс",
+            "pingAliveFast": "<1 мс",
+            "pingDown": "недоступен",
+            "pingPending": "проверка…",
+            "pingNoIp": "нет IP",
+            "pingNoDevices": "Устройств не найдено",
+            "pingFromText": "из текста заявки",
+            "pingFailed": "ошибка",
+            "pingBadgeTitle": "Пинг: доступны {0} из {1}. Нажмите, чтобы повторить.",
+            "pingIp": "Пинг {0}",
+            "pingAllIps": "Пинг всех IP на странице",
+            "pingNoIpInField": "IP-адрес не найден",
+            "pingApiError": "Не удалось получить данные заявок: {0}",
+            "pingHelperMissing": "Помощник пинга не отвечает на 127.0.0.1:{0}. Запустите ping-helper\\sd-ping-helper.cmd (см. README).",
+            "pingHelperTitle": "Пинг устройств",
+            "pingHelperDesc": "Пинг выполняет локальный помощник ping-helper\\sd-ping-helper.cmd на 127.0.0.1:{0}.",
+            "pingHelperCheck": "Проверить",
+            "pingHelperOk": "Работает ✓",
+            "pingHelperDown": "Не отвечает ❌",
+            "pingHelperUnknown": "Не проверено"
         }
     };
     const LANGUAGE_BASE_URL = 'https://raw.githubusercontent.com/Ovolsan/O-sd.bitech/main/languages/';
@@ -1833,6 +1900,56 @@
         if (e.isTrusted) monitorDismissAlerts();
     }, true);
 
+    // Мелодія грає через Web Audio, а не <audio>. Через @grant скрипт працює в пісочниці Tampermonkey,
+    // і Chrome не пускає звідти data:-адресу в <audio> («Media load rejected by URL safety check»).
+    // Web Audio декодує байти напряму, без адреси. Розкодовані мелодії кешуються (денна й нічна).
+    let melodyContext = null;
+    const melodyBuffers = new Map(); // audioData → Promise<AudioBuffer>
+
+    function getMelodyContext() {
+        if (!melodyContext) melodyContext = new (window.AudioContext || window.webkitAudioContext)();
+        return melodyContext;
+    }
+
+    function decodeMelody(audioData) {
+        let buffer = melodyBuffers.get(audioData);
+        if (!buffer) {
+            const binary = atob(audioData.slice(audioData.indexOf(',') + 1));
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            buffer = getMelodyContext().decodeAudioData(bytes.buffer);
+            buffer.catch(() => melodyBuffers.delete(audioData));
+            // Тримаються лише дві останні мелодії, щоб замінений файл не займав пам'ять.
+            if (melodyBuffers.size >= 2) melodyBuffers.delete(melodyBuffers.keys().next().value);
+            melodyBuffers.set(audioData, buffer);
+        }
+        return buffer;
+    }
+
+    // Повертає об'єкт із pause(), як в <audio>, щоб stopCurrentAudio() зупиняв мелодію так само.
+    function playMelodyData(audioData) {
+        const ctx = getMelodyContext();
+        const player = {
+            source: null,
+            stopped: false,
+            pause() {
+                this.stopped = true;
+                try { this.source?.stop(); } catch (e) { }
+            }
+        };
+        if (ctx.state === 'suspended') ctx.resume().catch(() => { });
+        decodeMelody(audioData).then(buffer => {
+            if (player.stopped) return;
+            const source = ctx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(ctx.destination);
+            source.onended = () => { if (currentAudio === player) currentAudio = null; };
+            player.source = source;
+            source.start();
+        }).catch(e => console.log('[sd.bitech] Audio playback failed:', e));
+        return player;
+    }
+
     function playAlertSound(hasFirstCriticality = false, forceType = null) {
         stopCurrentAudio();
         const generation = audioGeneration;
@@ -1849,10 +1966,7 @@
 
             if (!audioData) return;
             try {
-                const audio = new Audio(audioData);
-                currentAudio = audio;
-                audio.play().catch(e => console.log('[sd.bitech] Audio playback failed:', e));
-                audio.onended = () => { if (currentAudio === audio) currentAudio = null; };
+                currentAudio = playMelodyData(audioData);
             } catch (e) { console.log('[sd.bitech] Audio error:', e); }
         };
         try {
@@ -2283,8 +2397,26 @@
                         <span id="notif_status" style="color:#9d9588; font-size:11px; flex-grow:1;">${escapePanelText(notifStatusText)}</span>
                         <button type="button" id="btn_notif_request" style="${btnActionStyle}">${htmlT('requestPermission')}</button>
                     </div>
+                </section>
+                <section class="ovolya-setting-section">
+                    <h4>${htmlT('pingHelperTitle')}</h4>
+                    <p>${htmlT('pingHelperDesc', PING_HELPER_PORT)}</p>
+                    <div class="ovolya-setting-actions">
+                        <span id="ping_helper_status" style="color:#9d9588; font-size:11px; flex-grow:1;">${htmlT('pingHelperUnknown')}</span>
+                        <button type="button" id="btn_ping_helper_check" style="${btnActionStyle}">${htmlT('pingHelperCheck')}</button>
+                    </div>
                 </section></div>
             `;
+            const pingHelperStatus = panel.querySelector('#ping_helper_status');
+            panel.querySelector('#btn_ping_helper_check').onclick = async () => {
+                pingHelperStatus.textContent = t('pingPending');
+                try {
+                    const status = await requestPingHelper('/status');
+                    pingHelperStatus.textContent = status?.ok ? `${t('pingHelperOk')} v${status.version}` : t('pingHelperDown');
+                } catch (error) {
+                    pingHelperStatus.textContent = t('pingHelperDown');
+                }
+            };
             panel.querySelector('#ovolya-lang-uk').onclick = () => setInterfaceLanguage('uk');
             panel.querySelector('#ovolya-lang-ru').onclick = () => setInterfaceLanguage('ru');
             const handleFile = (inputObj, storageKey, varName) => {
@@ -2598,6 +2730,778 @@ ${t('debugTooltip')}`;
         monitorUpdateDebug();
     }
 
+    // ================ПОЗНАЧКИ ТА ПІНГ ПРИСТРОЇВ (СПИСОК ЗАЯВОК, «КЛІЄНТ → МЕРЕЖА …»)================
+    // Позначки зберігаються лише в цьому браузері. Пристрої заявки — її обладнання з довідника мережі
+    // та IP з назви й опису. Справжній ICMP-пінг виконує локальний помічник ping-helper/sd-ping-helper.ps1.
+    const REQUEST_MARKS_KEY = 'sd_request_marks_v1';
+    const REQUEST_MARKS_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
+    const REQUEST_MARKS_MAX_COUNT = 5000;
+    const REQUEST_LIST_ROW_SELECTOR = ':is(app-requests-list, app-requests-list-legacy) .p-datatable-tbody > tr';
+    const REQUEST_ROW_LINK_SELECTOR = 'a[href^="/admin/requests/"]';
+    const PING_HELPER_PORT = 47123;
+    const PING_HELPER_URL = `http://127.0.0.1:${PING_HELPER_PORT}`;
+    const PING_HELPER_TIMEOUT_MS = 20000;
+    const PING_BATCH_SIZE = 100;
+    // Тип мережі заявки (node) → довідник обладнання в «Клієнт»; у довіднику «СенсБанк» IP немає.
+    const NODE_MODULES = { 1: 'nodes', 2: 'nodes_lnd', 3: 'nodes_tetra', 4: 'nodes_sense', 5: 'nodes_zkp' };
+    const NODE_IP_MODULES = ['nodes', 'nodes_lnd', 'nodes_tetra', 'nodes_zkp'];
+    // Окрема адреса IPv4. Підмережа (10.0.0.0/24) не пінгується, /32 — так.
+    const IPV4_PATTERN = /(?<!\d|\d\.)(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?!\d|\.\d|\/(?:[12]?\d|3[01])(?!\d))/g;
+    const pingIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>';
+
+    // Номер версії в листі моніторингу («Version:8.1.1.3») схожий на IP — такі збіги пропускаються.
+    const VERSION_PREFIX = /(?<![\p{L}\d])(?:v|ver|version|firmware|build|release|верс\p{L}*|прошивк\p{L}*)\s*[.:=#]?\s*$/iu;
+
+    function extractIps(text) {
+        const source = String(text ?? '');
+        const ips = [];
+        for (const match of source.matchAll(IPV4_PATTERN)) {
+            const ip = match[0];
+            if (ip === '0.0.0.0' || ip === '255.255.255.255' || ips.includes(ip)) continue;
+            if (VERSION_PREFIX.test(source.slice(Math.max(0, match.index - 24), match.index))) continue;
+            ips.push(ip);
+        }
+        return ips;
+    }
+
+    // Назву колонки «ІР адреса» на сайті набрано кириличними І та Р.
+    function isIpCaption(text) {
+        return /(^|[^\p{L}])IP([^\p{L}]|$)/iu.test(String(text || '').replace(/І/g, 'I').replace(/Р/g, 'P'));
+    }
+
+    function ensureRequestToolsStyle() {
+        if (document.getElementById('ovolya-request-tools-style')) return;
+        const style = document.createElement('style');
+        style.id = 'ovolya-request-tools-style';
+        // Без div і span: стиль сайту примусово перефарбовує їх.
+        style.textContent = `
+            .ovolya-list-menu { position:fixed; z-index:100000; min-width:230px; max-width:calc(100vw - 8px); margin:0; padding:4px 0; background:#26282d; border:1px solid #3a3c42; border-radius:0; box-shadow:0 8px 24px #000a; font:13px 'Segoe UI', Arial, sans-serif; }
+            .ovolya-list-menu button { display:block; width:100%; margin:0; padding:7px 14px; border:0; border-radius:0; background:transparent; color:#e6e6e9; text-align:left; white-space:nowrap; cursor:pointer; font:inherit; }
+            .ovolya-list-menu button:is(:hover, :focus-visible) { background:#2b3b52; color:#cfe4ff; outline:none; }
+            .ovolya-list-menu hr { margin:4px 0; border:0; border-top:1px solid #3a3c42; }
+            .ovolya-list-menu p { margin:4px 0 0; padding:6px 14px 3px; border-top:1px solid #3a3c42; color:#9a9ba3; font-size:11.5px; white-space:nowrap; }
+            tr.ovolya-request-marked > td { position:relative; }
+            tr.ovolya-request-marked > td::after { content:''; position:absolute; inset:0; pointer-events:none; background:#3fb95012; }
+            /* Лівого відступу в контейнера списку (.p-3) немає — таблиця починається від лівого меню,
+               а перші комірки мають відступ 1rem: у цій смузі стоять індикатор пінгу й зелений фон позначки.
+               Решту відступів контейнера задає стиль (тут селектор специфічніший за його правило). */
+            :is(app-requests-list, app-requests-list-legacy) > div.p-3:has(> p-table) { padding-left:0 !important; }
+            :is(app-requests-list, app-requests-list-legacy) p-table.p-datatable > .p-datatable-table-container > table > :is(thead, tbody, tfoot) > tr > :is(td, th):first-child { padding-left:1rem !important; }
+            /* Пінг заявки — стовпчик прямокутників у цій смузі, по одному на пристрій. */
+            .ovolya-ping-cell { position:relative; }
+            .ovolya-ping-badge { position:absolute; left:4px; top:3px; bottom:3px; z-index:1; display:flex; flex-direction:column; gap:2px; width:6px; margin:0; padding:0; border:0; border-radius:0; background:transparent; cursor:pointer; }
+            .ovolya-ping-badge > b { flex:1 1 0; min-height:1px; background:#9a9ba3; }
+            .ovolya-ping-badge > b[data-status="alive"] { background:#3fb950; }
+            .ovolya-ping-badge > b[data-status="down"] { background:#f85149; }
+            .ovolya-ping-badge > b[data-status="error"] { background:#d29922; }
+            .ovolya-ping-badge > b[data-status="noip"] { background:#6e7681; opacity:.6; }
+            .ovolya-ping-badge > b[data-status="pending"] { animation:ovolya-ping-pulse 1s ease-in-out infinite; }
+            .ovolya-ping-badge:hover > b { filter:brightness(1.3); }
+            .ovolya-ping-badge:focus-visible, .ovolya-ip-ping:focus-visible { outline:2px solid #5aa9ff; outline-offset:0; }
+            .ovolya-ip-ping[data-state="alive"] { color:#3fb950; border-color:#3fb95066; }
+            .ovolya-ip-ping[data-state="partial"] { color:#d29922; border-color:#d2992266; }
+            .ovolya-ip-ping[data-state="down"] { color:#f85149; border-color:#f8514966; }
+            .ovolya-ip-ping[data-state="error"] { color:#d29922; border-color:#d2992266; }
+            .ovolya-ip-ping[data-state="pending"] svg { animation:ovolya-ping-pulse 1s ease-in-out infinite; }
+            .ovolya-ip-ping { display:inline-flex; align-items:center; gap:4px; height:20px; margin:0 0 0 6px; padding:0 5px; vertical-align:middle; border:1px solid #44464d; border-radius:0; background:#2a2c31; color:#cfd3da; font:600 11px/1 'Segoe UI', Arial, sans-serif; white-space:nowrap; cursor:pointer; }
+            .ovolya-ip-ping:hover { background:#33353b; color:#cfe4ff; }
+            .ovolya-ip-ping svg { display:block; flex:none; width:13px; height:13px; }
+            .ovolya-ip-ping b { font-weight:inherit; }
+            .ovolya-ip-ping b:empty { display:none; }
+            .ovolya-ip-field { display:flex; align-items:stretch; gap:6px; }
+            .ovolya-ip-field > input { flex:1 1 auto; min-width:0; }
+            .ovolya-ip-field > .ovolya-ip-ping { height:auto; margin:0; padding:0 10px; }
+            #ovolya-ping-toast { position:fixed; right:12px; bottom:12px; z-index:99991; max-width:min(440px, calc(100vw - 24px)); margin:0; padding:8px 12px; background:#26282d; border:1px solid #3a3c42; border-left:3px solid #d29922; border-radius:0; box-shadow:0 8px 24px #000a; color:#e6e6e9; font:12.5px/1.45 'Segoe UI', Arial, sans-serif; }
+            @keyframes ovolya-ping-pulse { 50% { opacity:.25; } }
+            @media (prefers-reduced-motion:reduce) { .ovolya-ping-badge > b, .ovolya-ip-ping svg { animation:none !important; } }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // ---------- Позначки ----------
+    function readRequestMarks() {
+        try {
+            const marks = JSON.parse(localStorage.getItem(REQUEST_MARKS_KEY) || '{}');
+            if (marks && typeof marks === 'object' && !Array.isArray(marks)) return marks;
+        } catch (e) { console.warn('[sd.bitech] Пошкоджені позначки заявок:', e); }
+        return {};
+    }
+    let requestMarks = readRequestMarks();
+
+    // Старі позначки видаляються: щоденні заявки «Регламенту» щоразу мають новий номер.
+    function saveRequestMarks() {
+        const now = Date.now();
+        requestMarks = Object.fromEntries(Object.entries(requestMarks)
+            .filter(([id, time]) => /^\d+$/.test(id) && Number.isFinite(time) && now - time < REQUEST_MARKS_MAX_AGE_MS)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, REQUEST_MARKS_MAX_COUNT));
+        try {
+            localStorage.setItem(REQUEST_MARKS_KEY, JSON.stringify(requestMarks));
+        } catch (e) { console.warn('[sd.bitech] Позначки не збережено:', e); }
+    }
+
+    function isRequestMarked(id) { return Object.hasOwn(requestMarks, id); }
+
+    function setRequestsMarked(ids, marked) {
+        const now = Date.now();
+        ids.forEach(id => { if (marked) requestMarks[id] = now; else delete requestMarks[id]; });
+        saveRequestMarks();
+        applyRequestListExtras();
+    }
+
+    function getRequestRowId(row) {
+        return row.querySelector(REQUEST_ROW_LINK_SELECTOR)?.getAttribute('href').match(/^\/admin\/requests\/(\d+)\/?$/)?.[1] || null;
+    }
+
+    function getRequestListRows() {
+        return [...document.querySelectorAll(REQUEST_LIST_ROW_SELECTOR)]
+            .map(row => ({ row, id: getRequestRowId(row) }))
+            .filter(item => item.id);
+    }
+
+    function isRequestRowSelected(row) {
+        return !!row.querySelector('p-tablecheckbox [data-p-checked="true"], p-tablecheckbox input:checked');
+    }
+
+    // Викликається з runAllTasks: змінює лише клас рядка і значок пінгу, тому не зациклює спостерігач.
+    function applyRequestListExtras() {
+        const rows = getRequestListRows();
+        if (!rows.length) return;
+        ensureRequestToolsStyle();
+        for (const { row, id } of rows) {
+            row.classList.toggle('ovolya-request-marked', isRequestMarked(id));
+            renderRequestPingBadge(row, id);
+        }
+    }
+
+    // ---------- API сайту ----------
+    // Сайт тримає токен доступу лише в пам'яті Angular, тому скрипт бере власний так само,
+    // як сайт після відповіді 401 (за cookie сесії).
+    let sdApiToken = null;
+    let sdApiTokenRequest = null;
+
+    function readCookie(name) {
+        const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
+        return match ? decodeURIComponent(match[1]) : '';
+    }
+
+    async function postSdApi(body, token) {
+        const headers = { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': readCookie('XSRF-TOKEN') };
+        if (token) headers.Authorization = `Bearer ${token}`;
+        const response = await fetch('/app', { method: 'POST', headers, body: JSON.stringify(body), credentials: 'include', cache: 'no-store' });
+        let json = null;
+        try { json = await response.json(); } catch (e) { /* Відповідь без JSON. */ }
+        return { status: response.status, json };
+    }
+
+    function getSdApiToken(force) {
+        if (!force && sdApiToken && sdApiToken.expiresAt - Date.now() > 60000) return Promise.resolve(sdApiToken.value);
+        sdApiTokenRequest ??= (async () => {
+            const { status, json } = await postSdApi({ module: 'admin', action: 'refreshAccessToken' });
+            const value = json?.accessToken;
+            if (status !== 200 || typeof value !== 'string') throw new Error(json?.error || `HTTP ${status}`);
+            let expiresAt = Date.now() + 5 * 60000;
+            try {
+                const payload = JSON.parse(atob(value.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+                if (Number.isFinite(payload.exp)) expiresAt = payload.exp * 1000;
+            } catch (e) { /* Термін дії невідомий — використовується 5 хвилин. */ }
+            sdApiToken = { value, expiresAt };
+            return value;
+        })().finally(() => { sdApiTokenRequest = null; });
+        return sdApiTokenRequest;
+    }
+
+    async function callSdApi(body) {
+        let response = await postSdApi(body, await getSdApiToken(false));
+        if (response.status === 401) response = await postSdApi(body, await getSdApiToken(true));
+        if (response.status !== 200) throw new Error(response.json?.error || `HTTP ${response.status}`);
+        return response.json;
+    }
+
+    async function readSdRecords(module, ids, data = {}) {
+        const records = [];
+        for (let index = 0; index < ids.length; index += 100) {
+            const chunk = ids.slice(index, index + 100);
+            const json = await callSdApi({ module, action: 'readMany', data, filter: { id: chunk }, pagination: { currPage: 1, pageSize: chunk.length } });
+            // Беремо лише запитані записи, навіть якщо сервер проігнорує фільтр.
+            records.push(...(Array.isArray(json?.data) ? json.data : []).filter(record => chunk.includes(record?.id)));
+        }
+        return records;
+    }
+
+    // Записи обладнання за id; id спільні для всіх довідників мережі.
+    async function loadNodeRecords(equipmentModules) {
+        const records = new Map();
+        const save = list => list.forEach(record => records.set(record.id, record));
+        const groups = new Map();
+        for (const [id, module] of equipmentModules) {
+            if (!NODE_IP_MODULES.includes(module)) continue;
+            if (!groups.has(module)) groups.set(module, []);
+            groups.get(module).push(id);
+        }
+        await Promise.all([...groups].map(async ([module, ids]) => save(await readSdRecords(module, ids))));
+        // Обладнання без відомого типу мережі або не знайдене у своєму довіднику шукаємо в інших.
+        for (const module of NODE_IP_MODULES) {
+            const ids = [...equipmentModules].filter(([id, own]) => own !== 'nodes_sense' && own !== module && !records.has(id)).map(([id]) => id);
+            if (ids.length) save(await readSdRecords(module, ids));
+        }
+        return records;
+    }
+
+    async function loadRequestDevices(ids) {
+        const requests = await readSdRecords('requests', ids.map(Number), { requestTxtFormat: 'text/plain' });
+        const equipmentModules = new Map();
+        for (const request of requests) {
+            for (const item of request.equipment || []) {
+                if (Number.isInteger(item?.id)) equipmentModules.set(item.id, NODE_MODULES[request.node?.id] || '');
+            }
+        }
+        const nodes = await loadNodeRecords(equipmentModules);
+        const result = new Map();
+        for (const request of requests) {
+            const devices = [];
+            const seen = new Set();
+            for (const item of request.equipment || []) {
+                const node = nodes.get(item?.id);
+                const name = item?.header || node?.header || '';
+                const ips = extractIps(node?.ip);
+                if (!ips.length) devices.push({ name, ip: '', raw: String(node?.ip ?? '').trim(), status: 'noip' });
+                for (const ip of ips.filter(ip => !seen.has(ip))) {
+                    seen.add(ip);
+                    devices.push({ name, ip, status: 'pending' });
+                }
+            }
+            // IP з назви й опису (наприклад, «16:30 FortiGate-3000D (10.155.105.1)»), яких немає в обладнанні.
+            for (const ip of extractIps(`${request.header || ''}\n${request.txt || ''}`).filter(ip => !seen.has(ip))) {
+                seen.add(ip);
+                devices.push({ name: '', ip, status: 'pending' });
+            }
+            result.set(String(request.id), { title: request.header || '', devices });
+        }
+        return result;
+    }
+
+    // ---------- Помічник пінгу ----------
+    class PingHelperError extends Error {}
+
+    function requestPingHelper(path) {
+        const url = PING_HELPER_URL + path;
+        const headers = { 'X-Ovolya-Ping': '1' };
+        const unavailable = () => new PingHelperError(t('pingHelperMissing', PING_HELPER_PORT));
+        // Tampermonkey звертається до 127.0.0.1 в обхід CORS і обмежень доступу до локальної мережі.
+        if (typeof GM_xmlhttpRequest === 'function') {
+            return new Promise((resolve, reject) => {
+                try {
+                    GM_xmlhttpRequest({
+                        method: 'GET', url, headers, anonymous: true, timeout: PING_HELPER_TIMEOUT_MS,
+                        onload(response) {
+                            if (response.status === 0) { reject(unavailable()); return; }
+                            if (response.status !== 200) { reject(new Error(`HTTP ${response.status}`)); return; }
+                            try { resolve(JSON.parse(response.responseText)); } catch (error) { reject(error); }
+                        },
+                        onerror: () => reject(unavailable()),
+                        ontimeout: () => reject(unavailable()),
+                        onabort: () => reject(unavailable())
+                    });
+                } catch (error) {
+                    reject(error);
+                }
+            });
+        }
+        return (async () => {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), PING_HELPER_TIMEOUT_MS);
+            let response;
+            try {
+                response = await fetch(url, { headers, cache: 'no-store', credentials: 'omit', signal: controller.signal });
+            } catch (error) {
+                throw unavailable();
+            } finally {
+                clearTimeout(timer);
+            }
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return response.json();
+        })();
+    }
+
+    async function pingAddresses(ips, onBatch, isCancelled = () => false) {
+        for (let index = 0; index < ips.length; index += PING_BATCH_SIZE) {
+            if (isCancelled()) return;
+            const batch = ips.slice(index, index + PING_BATCH_SIZE);
+            const json = await requestPingHelper(`/ping?count=2&timeout=1000&ip=${batch.join(',')}`);
+            if (isCancelled()) return;
+            const results = new Map();
+            for (const item of Array.isArray(json?.results) ? json.results : []) {
+                if (batch.includes(item?.ip)) results.set(item.ip, item);
+            }
+            onBatch(batch, results);
+        }
+    }
+
+    function toPingState(result) {
+        return result?.alive
+            ? { status: 'alive', time: Math.max(0, Number(result.time) || 0), detail: '' }
+            : { status: 'down', time: null, detail: String(result?.status || '') };
+    }
+
+    function formatPingStatus(state) {
+        switch (state?.status) {
+            case 'alive': return state.time > 0 ? t('pingAlive', state.time) : t('pingAliveFast');
+            case 'down': return t('pingDown');
+            case 'pending': return t('pingPending');
+            case 'noip': return t('pingNoIp');
+            default: return t('pingFailed');
+        }
+    }
+
+    function formatPingDevice(device) {
+        const detail = device.status === 'down' || device.status === 'error' ? device.detail : '';
+        return `${[device.name || t('pingFromText'), device.ip || device.raw].filter(Boolean).join(' · ')} — ${formatPingStatus(device)}${detail ? ` (${detail})` : ''}`;
+    }
+
+    let pingToastTimer = null;
+    function showPingToast(message) {
+        ensureRequestToolsStyle();
+        let toast = document.getElementById('ovolya-ping-toast');
+        if (!toast) {
+            toast = document.createElement('p');
+            toast.id = 'ovolya-ping-toast';
+            toast.setAttribute('role', 'status');
+            document.body.append(toast);
+        }
+        toast.textContent = message;
+        clearTimeout(pingToastTimer);
+        pingToastTimer = setTimeout(() => toast.remove(), 8000);
+    }
+
+    // ---------- Пінг пристроїв заявок ----------
+    const requestPingResults = new Map(); // id заявки → { state: loading|ready|error, title, devices, error }
+    let requestPingRun = null;
+
+    function getRequestPingSummary(result) {
+        const withIp = result.devices.filter(device => device.ip);
+        const alive = withIp.filter(device => device.status === 'alive').length;
+        let state;
+        if (result.state === 'error') state = 'error';
+        else if (result.state === 'loading' || withIp.some(device => device.status === 'pending')) state = 'pending';
+        else if (!withIp.length) state = 'none';
+        else if (withIp.some(device => device.status === 'error')) state = 'error';
+        else if (alive === withIp.length) state = 'ok';
+        else state = alive ? 'partial' : 'down';
+        return { state, alive, total: withIp.length };
+    }
+
+    // Стани прямокутників індикатора: по одному на пристрій; поки пристрої не завантажені,
+    // при помилці або без пристроїв — один прямокутник.
+    function getRequestPingCells(result) {
+        if (result.state === 'loading') return ['pending'];
+        if (result.state === 'error') return ['error'];
+        if (!result.devices.length) return ['noip'];
+        return result.devices.map(device => device.status);
+    }
+
+    // Індикатор стоїть у першій комірці рядка, біля лівого краю, і показує лише кольори;
+    // подробиці — у підказці. DOM змінюється тільки коли змінився стан, щоб не будити спостерігач.
+    function renderRequestPingBadge(row, id) {
+        const result = requestPingResults.get(id);
+        const cell = row.querySelector(':scope > td');
+        let badge = row.querySelector('.ovolya-ping-badge');
+        if (!result || !cell) {
+            badge?.parentElement?.classList.remove('ovolya-ping-cell');
+            badge?.remove();
+            return;
+        }
+        if (!badge) {
+            badge = document.createElement('button');
+            badge.type = 'button';
+            badge.className = 'ovolya-ping-badge';
+        }
+        if (badge.dataset.requestId !== id) badge.dataset.requestId = id;
+        if (badge.parentElement !== cell) cell.prepend(badge);
+        if (!cell.classList.contains('ovolya-ping-cell')) cell.classList.add('ovolya-ping-cell');
+        const summary = getRequestPingSummary(result);
+        const cells = getRequestPingCells(result).join(',');
+        if (badge.dataset.cells !== cells) {
+            badge.dataset.cells = cells;
+            badge.replaceChildren(...cells.split(',').map(status => {
+                const part = document.createElement('b');
+                part.dataset.status = status;
+                return part;
+            }));
+        }
+        const head = result.state === 'loading' ? t('pingLoading')
+            : result.state === 'error' ? `${t('pingFailed')}: ${result.error}`
+            : summary.state === 'none' ? t('pingNoDevices')
+            : t('pingBadgeTitle', summary.alive, summary.total);
+        const title = [head, ...result.devices.map(formatPingDevice)].join('\n');
+        if (badge.dataset.state !== summary.state) badge.dataset.state = summary.state;
+        if (badge.title !== title) {
+            badge.title = title;
+            badge.setAttribute('aria-label', title);
+        }
+    }
+
+    function refreshRequestPingViews() {
+        applyRequestListExtras();
+    }
+
+    async function startRequestPing(requestIds) {
+        const ids = [...new Set(requestIds.map(String))].filter(id => /^\d+$/.test(id));
+        if (!ids.length) return;
+        const previous = requestPingRun;
+        if (previous) {
+            previous.cancelled = true;
+            // Незавершені результати перерваного запуску не лишаються «на перевірці».
+            for (const id of previous.ids) {
+                const result = requestPingResults.get(id);
+                if (!ids.includes(id) && result && (result.state === 'loading' || result.devices.some(device => device.status === 'pending'))) {
+                    requestPingResults.delete(id);
+                }
+            }
+        }
+        const titles = new Map(getRequestListRows().map(({ row, id }) => [id, row.querySelector(REQUEST_ROW_LINK_SELECTOR)?.textContent.trim() || '']));
+        const run = { ids, phase: 'loading', done: 0, total: 0, error: '', warning: '', cancelled: false };
+        requestPingRun = run;
+        ids.forEach(id => requestPingResults.set(id, { state: 'loading', title: titles.get(id) || requestPingResults.get(id)?.title || '', devices: [], error: '' }));
+        refreshRequestPingViews();
+        let loaded;
+        try {
+            loaded = await loadRequestDevices(ids);
+        } catch (error) {
+            if (run.cancelled) return;
+            // Запасний шлях, як в O OLX: без API лишаються IP з назв заявок у списку.
+            run.warning = t('pingApiError', error?.message || error);
+            loaded = new Map(ids.map(id => {
+                const title = requestPingResults.get(id)?.title || '';
+                return [id, { title, devices: extractIps(title).map(ip => ({ name: '', ip, status: 'pending' })) }];
+            }));
+            if (![...loaded.values()].some(entry => entry.devices.length)) {
+                finishRequestPingWithError(run, run.warning);
+                return;
+            }
+            // Окремого вікна результатів немає: попередження показується коротким повідомленням.
+            showPingToast(run.warning);
+        }
+        if (run.cancelled) return;
+        const ips = new Set();
+        for (const id of ids) {
+            const entry = loaded.get(id);
+            requestPingResults.set(id, { state: 'ready', title: entry?.title || requestPingResults.get(id)?.title || '', devices: entry?.devices || [], error: '' });
+            entry?.devices.forEach(device => { if (device.ip) ips.add(device.ip); });
+        }
+        run.phase = 'ping';
+        run.total = ips.size;
+        refreshRequestPingViews();
+        try {
+            await pingAddresses([...ips], (batch, results) => {
+                for (const id of ids) {
+                    for (const device of requestPingResults.get(id).devices) {
+                        if (device.ip && batch.includes(device.ip)) Object.assign(device, toPingState(results.get(device.ip)));
+                    }
+                }
+                run.done += batch.length;
+                refreshRequestPingViews();
+            }, () => run.cancelled);
+        } catch (error) {
+            if (!run.cancelled) finishRequestPingWithError(run, error instanceof PingHelperError ? error.message : `${t('pingFailed')}: ${error?.message || error}`);
+            return;
+        }
+        if (run.cancelled) return;
+        run.phase = 'done';
+        refreshRequestPingViews();
+    }
+
+    function finishRequestPingWithError(run, message) {
+        run.phase = 'error';
+        run.error = message;
+        for (const id of run.ids) {
+            const result = requestPingResults.get(id);
+            if (!result) continue;
+            if (result.state === 'loading') Object.assign(result, { state: 'error', error: message });
+            result.devices.forEach(device => { if (device.status === 'pending') Object.assign(device, { status: 'error', detail: '' }); });
+        }
+        refreshRequestPingViews();
+        showPingToast(message);
+    }
+
+    // ---------- Контекстне меню списку заявок ----------
+    let requestListMenu = null;
+
+    function closeRequestListMenu() {
+        requestListMenu?.remove();
+        requestListMenu = null;
+    }
+
+    function showRequestListMenu(x, y, id) {
+        closeRequestListMenu();
+        ensureRequestToolsStyle();
+        const rows = getRequestListRows();
+        // Якщо клікнуто по одній з вибраних галочками заявок — дія стосується всіх вибраних.
+        const selected = rows.filter(item => isRequestRowSelected(item.row)).map(item => item.id);
+        const targets = selected.length > 1 && selected.includes(id) ? selected : [id];
+        const many = targets.length > 1;
+        const marked = targets.every(isRequestMarked);
+        const visible = rows.filter(item => item.row.style.display !== 'none').map(item => item.id);
+        const markedOnPage = visible.filter(isRequestMarked);
+        const items = [
+            [many ? t(marked ? 'markUnsetMany' : 'markSetMany', targets.length) : t(marked ? 'markUnset' : 'markSet'), () => setRequestsMarked(targets, !marked)],
+            null,
+            [many ? t('pingSelected', targets.length) : t('pingRequest', id), () => startRequestPing(targets)],
+            visible.length > 1 && [t('pingAll', visible.length), () => startRequestPing(visible)],
+            null,
+            [t('openInNewTab'), () => window.open(`/admin/requests/${id}`, '_blank', 'noopener')],
+            markedOnPage.length > 0 && [t('markClearPage', markedOnPage.length), () => {
+                if (markedOnPage.length < 2 || confirm(t('markClearConfirm', markedOnPage.length))) setRequestsMarked(markedOnPage, false);
+            }]
+        ].filter(item => item !== false);
+        const menu = document.createElement('nav');
+        menu.className = 'ovolya-list-menu';
+        menu.setAttribute('role', 'menu');
+        for (const item of items) {
+            if (!item) {
+                const separator = document.createElement('hr');
+                separator.setAttribute('role', 'separator');
+                menu.append(separator);
+                continue;
+            }
+            const [label, action] = item;
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.setAttribute('role', 'menuitem');
+            button.textContent = label;
+            button.addEventListener('click', () => {
+                closeRequestListMenu();
+                void action();
+            });
+            menu.append(button);
+        }
+        const hint = document.createElement('p');
+        hint.textContent = t('listMenuHint');
+        menu.append(hint);
+        menu.addEventListener('keydown', event => {
+            const buttons = [...menu.querySelectorAll('button')];
+            const index = buttons.indexOf(document.activeElement);
+            let next = null;
+            if (event.key === 'ArrowDown') next = (index + 1) % buttons.length;
+            else if (event.key === 'ArrowUp') next = (index - 1 + buttons.length) % buttons.length;
+            else if (event.key === 'Home') next = 0;
+            else if (event.key === 'End') next = buttons.length - 1;
+            else if (event.key === 'Escape' || event.key === 'Tab') {
+                event.preventDefault();
+                event.stopPropagation();
+                closeRequestListMenu();
+                return;
+            }
+            if (next === null) return;
+            event.preventDefault();
+            buttons[next].focus();
+        });
+        document.body.append(menu);
+        const rect = menu.getBoundingClientRect();
+        menu.style.left = `${Math.max(0, Math.min(x, window.innerWidth - rect.width - 2))}px`;
+        menu.style.top = `${Math.max(0, Math.min(y, window.innerHeight - rect.height - 2))}px`;
+        requestListMenu = menu;
+        menu.querySelector('button').focus({ preventScroll: true });
+    }
+
+    document.addEventListener('contextmenu', event => {
+        if (event.shiftKey || !(event.target instanceof Element)) return;
+        // Меню відкривається під курсором, тож повторна подія contextmenu (від миші вона буває)
+        // приходить уже на саме меню — і без цього поверх нього відкривалося меню браузера.
+        if (event.target.closest('.ovolya-list-menu')) {
+            event.preventDefault();
+            return;
+        }
+        // Таймер скрипта SLA Timer відкриває власне меню.
+        if (event.target.closest('.list-sla-timer')) return;
+        const row = event.target.closest(REQUEST_LIST_ROW_SELECTOR);
+        const id = row && getRequestRowId(row);
+        if (!id) return;
+        // Виділений у рядку текст можна скопіювати звичайним меню браузера.
+        const selection = window.getSelection();
+        if (selection && !selection.isCollapsed && String(selection).trim() && row.contains(selection.anchorNode)) return;
+        event.preventDefault();
+        // Подія далі не йде: інакше власне меню сайту чи інших скриптів відкривається поверх цього.
+        event.stopImmediatePropagation();
+        let { clientX: x, clientY: y } = event;
+        if (!x && !y) {
+            // Клавіша меню на клавіатурі: меню з'являється під назвою заявки.
+            const rect = (row.querySelector(REQUEST_ROW_LINK_SELECTOR) || row).getBoundingClientRect();
+            x = rect.left;
+            y = rect.bottom;
+        }
+        showRequestListMenu(x, y, id);
+    }, true);
+
+    document.addEventListener('pointerdown', event => {
+        if (requestListMenu && !requestListMenu.contains(event.target)) closeRequestListMenu();
+    }, true);
+    document.addEventListener('scroll', event => {
+        if (requestListMenu && !requestListMenu.contains(event.target)) closeRequestListMenu();
+    }, true);
+    window.addEventListener('blur', closeRequestListMenu);
+    window.addEventListener('resize', closeRequestListMenu);
+
+    // ---------- Кнопки пінгу біля IP у «Клієнт → Мережа …» ----------
+    const ipPingResults = new Map(); // IP → { status, time, detail }
+
+    function getTextWithoutPingButtons(element) {
+        if (!element) return '';
+        if (!element.querySelector('.ovolya-ip-ping')) return element.textContent;
+        const clone = element.cloneNode(true);
+        clone.querySelectorAll('.ovolya-ip-ping').forEach(button => button.remove());
+        return clone.textContent;
+    }
+
+    function createIpPingButton(scope) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'ovolya-ip-ping';
+        button.dataset.scope = scope; // ip — адреса в рядку, table — усі адреси таблиці, input — поле картки
+        button.innerHTML = `${pingIcon}<b></b>`;
+        return button;
+    }
+
+    function updateIpPingButton(button) {
+        const ips = (button.dataset.ip || '').split(',').filter(Boolean);
+        const states = ips.map(ip => ipPingResults.get(ip));
+        const known = states.filter(Boolean);
+        let state = '';
+        let text = '';
+        if (known.some(item => item.status === 'pending')) {
+            state = 'pending';
+            text = '…';
+        } else if (known.length && ips.length === 1) {
+            state = known[0].status;
+            text = state === 'alive' ? formatPingStatus(known[0]) : state === 'down' ? '✗' : '!';
+        } else if (known.length && known.length === ips.length) {
+            const alive = known.filter(item => item.status === 'alive').length;
+            state = alive === ips.length ? 'alive' : alive ? 'partial' : 'down';
+            text = `${alive}/${ips.length}`;
+        }
+        const lines = [button.dataset.scope === 'table' ? t('pingAllIps') : t('pingIp', ips.join(', ') || '—')];
+        ips.forEach((ip, index) => {
+            const item = states[index];
+            if (item) lines.push(`${ip} — ${formatPingStatus(item)}${item.detail && item.status !== 'alive' ? ` (${item.detail})` : ''}`);
+        });
+        const title = lines.join('\n');
+        if (button.dataset.state !== state) button.dataset.state = state;
+        const label = button.querySelector('b');
+        if (label && label.textContent !== text) label.textContent = text;
+        if (button.title !== title) {
+            button.title = title;
+            button.setAttribute('aria-label', title);
+        }
+    }
+
+    function syncCellIpButtons(cell, ips) {
+        let buttons = [...cell.querySelectorAll(':scope > .ovolya-ip-ping')];
+        // Таблиця сайту перевикористовує рядки при гортанні: кнопки звіряються з поточним текстом.
+        if (buttons.map(button => button.dataset.ip).join(' ') !== ips.join(' ')) {
+            buttons.forEach(button => button.remove());
+            buttons = ips.map(ip => {
+                const button = createIpPingButton('ip');
+                button.dataset.ip = ip;
+                cell.append(button);
+                return button;
+            });
+        }
+        buttons.forEach(updateIpPingButton);
+    }
+
+    function enhanceNodeIpPing() {
+        if (!/^\/admin\/clients\/nodes/.test(window.location.pathname)) return;
+        let found = false;
+        document.querySelectorAll('app-resource-list table').forEach(table => {
+            const headRow = [...(table.tHead?.rows || [])].find(row => [...row.cells].some(cell => isIpCaption(getTextWithoutPingButtons(cell))));
+            if (!headRow) return;
+            const index = [...headRow.cells].findIndex(cell => isIpCaption(getTextWithoutPingButtons(cell)));
+            const tableIps = [];
+            for (const body of table.tBodies) {
+                for (const row of body.rows) {
+                    const cell = row.cells[index];
+                    if (!cell || cell.colSpan > 1) continue;
+                    const ips = extractIps(getTextWithoutPingButtons(cell));
+                    syncCellIpButtons(cell, ips);
+                    tableIps.push(...ips);
+                }
+            }
+            const headCell = headRow.cells[index];
+            let headButton = headCell.querySelector('.ovolya-ip-ping');
+            const uniqueIps = [...new Set(tableIps)].join(',');
+            if (uniqueIps) {
+                if (!headButton) {
+                    headButton = createIpPingButton('table');
+                    headCell.append(headButton);
+                }
+                if (headButton.dataset.ip !== uniqueIps) headButton.dataset.ip = uniqueIps;
+                updateIpPingButton(headButton);
+            } else {
+                headButton?.remove();
+            }
+            found = true;
+        });
+        document.querySelectorAll('app-resource-form app-text-input').forEach(field => {
+            if (field.getAttribute('key') !== 'ip' && !isIpCaption(field.getAttribute('label'))) return;
+            const input = field.querySelector('input');
+            if (!input?.parentElement) return;
+            input.parentElement.classList.add('ovolya-ip-field');
+            let button = input.parentElement.querySelector(':scope > .ovolya-ip-ping');
+            if (!button) {
+                button = createIpPingButton('input');
+                input.after(button);
+            }
+            const ips = extractIps(input.value).join(',');
+            if (button.dataset.ip !== ips) button.dataset.ip = ips;
+            updateIpPingButton(button);
+            found = true;
+        });
+        if (found) ensureRequestToolsStyle();
+    }
+
+    async function pingIpAddresses(addresses) {
+        const ips = [...new Set(addresses)];
+        ips.forEach(ip => ipPingResults.set(ip, { status: 'pending', time: null, detail: '' }));
+        const refresh = () => document.querySelectorAll('.ovolya-ip-ping').forEach(updateIpPingButton);
+        refresh();
+        try {
+            await pingAddresses(ips, (batch, results) => {
+                batch.forEach(ip => ipPingResults.set(ip, toPingState(results.get(ip))));
+                refresh();
+            });
+        } catch (error) {
+            const message = error instanceof PingHelperError ? error.message : `${t('pingFailed')}: ${error?.message || error}`;
+            ips.forEach(ip => {
+                if (ipPingResults.get(ip)?.status === 'pending') ipPingResults.set(ip, { status: 'error', time: null, detail: '' });
+            });
+            refresh();
+            showPingToast(message);
+        }
+    }
+
+    // Кнопки обробляються до сайту: заголовок колонки не сортує таблицю, рядок не розгортається.
+    document.addEventListener('click', event => {
+        const target = event.target instanceof Element ? event.target : null;
+        const badge = target?.closest('.ovolya-ping-badge');
+        const ipButton = target?.closest('.ovolya-ip-ping');
+        if (!badge && !ipButton) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (badge) {
+            void startRequestPing([badge.dataset.requestId]);
+            return;
+        }
+        if (ipButton.dataset.scope === 'input') {
+            ipButton.dataset.ip = extractIps(ipButton.parentElement.querySelector('input')?.value).join(',');
+        }
+        const ips = (ipButton.dataset.ip || '').split(',').filter(Boolean);
+        if (!ips.length) {
+            showPingToast(t('pingNoIpInField'));
+            return;
+        }
+        void pingIpAddresses(ips);
+    }, true);
+
     // ==========================ИНИЦИАЛИЗАЦИЯ==================================
     function initNewRequestsMonitor() {
         if (monitorInitialized) return;
@@ -2663,6 +3567,10 @@ ${t('debugTooltip')}`;
             requestLayout = readRequestLayout();
             enhanceRequestForm();
         }
+        if (e.key === REQUEST_MARKS_KEY) {
+            requestMarks = readRequestMarks();
+            applyRequestListExtras();
+        }
         if (e.key === REQUEST_FILTERS_KEY) {
             try {
                 const rules = JSON.parse(e.newValue || '[]');
@@ -2719,11 +3627,14 @@ ${t('debugTooltip')}`;
                 relocateControlsAndQueues();
                 enhanceListPage();
                 hideBlacklistedTickets();
+                applyRequestListExtras();
             } else {
                 const customContainer = document.getElementById('ovolya-custom-sidebar-container');
                 if (customContainer) customContainer.remove();
                 lastShortcutsSnapshot = '';
+                closeRequestListMenu();
             }
+            enhanceNodeIpPing();
         } finally { observer.observe(document.body, { childList: true, subtree: true }); }
     }
 
